@@ -1,10 +1,23 @@
 {
-  "name": "disposable-camera-app",
-  "main": "worker/index.js",
-  "compatibility_date": "2026-03-20",
-  "assets": {
-    "binding": "ASSETS",
-    "directory": "./dist",
-    "not_found_handling": "single-page-application"
-  }
+	"name": "disposable-camera-app",
+	"main": "worker/index.js",
+	"compatibility_date": "2026-03-20",
+	"assets": {
+		"binding": "ASSETS",
+		"directory": "./dist",
+		"not_found_handling": "single-page-application"
+	},
+	"d1_databases": [
+		{
+			"binding": "sophies_last_rodeo_db",
+			"database_name": "sophies-last-rodeo-db",
+			"database_id": "6ab44800-6547-410e-896b-8226b7cbb1fc"
+		}
+	],
+	"r2_buckets": [
+		{
+			"bucket_name": "sophies-last-rodeo-photos",
+			"binding": "sophies_last_rodeo_photos"
+		}
+	]
 }
