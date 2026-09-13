@@ -1,23 +1,10 @@
 {
-  "name": "paul-60-camera",
+  "name": "disposable-camera-app",
   "main": "worker/index.js",
   "compatibility_date": "2026-03-20",
   "assets": {
     "binding": "ASSETS",
     "directory": "./dist",
     "not_found_handling": "single-page-application"
-  },
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "paul-60-camera-db",
-      "database_id": "1aba8908-03b0-42d8-a4a8-703a247acea4"
-    }
-  ],
-  "r2_buckets": [
-    {
-      "binding": "PHOTOS",
-      "bucket_name": "paul-60-camera-photos"
-    }
-  ]
+  }
 }

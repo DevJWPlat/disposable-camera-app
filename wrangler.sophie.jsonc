@@ -1,0 +1,27 @@
+{
+  "name": "sophies-last-rodeo-camera",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-03-20",
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  },
+  "vars": {
+    "EVENT_SLUG": "sophies-last-rodeo",
+    "ADMIN_COOKIE_NAME": "sophie_camera_admin"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "sophies-last-rodeo-db",
+      "database_id": "REPLACE_WITH_SOPHIE_D1_ID"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "PHOTOS",
+      "bucket_name": "sophies-last-rodeo-photos"
+    }
+  ]
+}

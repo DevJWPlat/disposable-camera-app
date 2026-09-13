@@ -13,13 +13,14 @@ import leopardPattern from '@/assets/images/leopard-pattern.png'
 import { API_BASE_URL } from '../utils/api.js'
 import { generateId } from '../utils/id.js'
 import leopard from '@/assets/images/leopard.png'
+import { eventConfig } from '@/config/event.js'
 
 const router = useRouter()
 
 const videoRef = ref(null)
 const canvasRef = ref(null)
 
-const shotsRemaining = ref(25)
+const shotsRemaining = ref(eventConfig.maxShots)
 const loading = ref(true)
 const uploading = ref(false)
 const error = ref('')
@@ -36,21 +37,16 @@ let cameraStream = null
 const isDev = import.meta.env.DEV
 
 const STORAGE_KEYS = {
-  deviceToken: 'paul_60_camera_device_token',
-  sessionId: 'paul_60_camera_session_id',
-  guestName: 'paul_60_guest_name',
+  deviceToken: `disposable_camera_${eventConfig.slug}_device_token`,
+  sessionId: `disposable_camera_${eventConfig.slug}_session_id`,
 }
-
-const guestName = computed(() => {
-  return localStorage.getItem(STORAGE_KEYS.guestName) || 'Guest'
-})
 
 const isFrontCamera = computed(() => {
   return facingMode.value === 'user'
 })
 
 const previousShotNumber = computed(() => {
-  return shotsRemaining.value < 25
+  return shotsRemaining.value < eventConfig.maxShots
     ? shotsRemaining.value + 1
     : null
 })
@@ -201,15 +197,6 @@ async function startSession() {
   try {
     const deviceToken = getDeviceToken()
 
-    const storedGuestName = (
-      localStorage.getItem(STORAGE_KEYS.guestName) || ''
-    ).trim()
-
-    if (!storedGuestName) {
-      router.replace('/')
-      return false
-    }
-
     const response = await fetch(
       `${API_BASE_URL}/api/session/start`,
       {
@@ -219,7 +206,6 @@ async function startSession() {
         },
         body: JSON.stringify({
           deviceToken,
-          guestName: storedGuestName,
         }),
       },
     )
@@ -506,7 +492,7 @@ async function takePicture() {
 
     const photoFile = new File(
       [photoBlob],
-      `paul-60-${Date.now()}.jpg`,
+      `${eventConfig.slug}-${Date.now()}.jpg`,
       {
         type: 'image/jpeg',
         lastModified: Date.now(),
@@ -582,12 +568,12 @@ onBeforeUnmount(() => {
 
       <header class="camera-header">
         <div class="camera-brand">
-          <span>PP 60</span>
+          <span>{{ eventConfig.shortTitle }}</span>
           <span>ISO 400</span>
         </div>
 
         <p class="eyebrow">
-          Paul’s disposable camera
+          {{ eventConfig.title }}
         </p>
 
         <h1>
@@ -718,7 +704,7 @@ onBeforeUnmount(() => {
             </div>
 
             <div class="frame-information">
-              <span>PP 60</span>
+              <span>{{ eventConfig.shortTitle }}</span>
               <span>NO PREVIEW</span>
             </div>
           </div>

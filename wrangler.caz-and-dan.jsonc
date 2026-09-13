@@ -1,0 +1,27 @@
+{
+  "name": "caz-and-dan-camera",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-03-20",
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  },
+  "vars": {
+    "EVENT_SLUG": "caz-and-dan",
+    "ADMIN_COOKIE_NAME": "caz_dan_camera_admin"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "caz-and-dan-db",
+      "database_id": "REPLACE_WITH_CAZ_DAN_D1_ID"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "PHOTOS",
+      "bucket_name": "caz-and-dan-photos"
+    }
+  ]
+}

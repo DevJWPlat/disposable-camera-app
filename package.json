@@ -1,5 +1,5 @@
 {
-  "name": "paul-60-camera",
+  "name": "disposable-camera-app",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -9,11 +9,19 @@
     "preview": "vite preview",
     "cf:dev": "vite build && wrangler dev",
     "deploy": "vite build && wrangler deploy",
-    "d1:migrate:thumbnail": "wrangler d1 execute paul-60-camera-db --remote --file=./migrations/0001_add_thumbnail_r2_key.sql",
     "lint": "run-s lint:*",
     "lint:oxlint": "oxlint . --fix",
     "lint:eslint": "eslint . --fix --cache",
-    "format": "prettier --write --experimental-cli src/"
+    "format": "prettier --write --experimental-cli src/",
+    "build:sophie": "VITE_EVENT=sophies-last-rodeo vite build",
+    "build:caz": "VITE_EVENT=caz-and-dan vite build",
+    "cf:dev:sophie": "VITE_EVENT=sophies-last-rodeo vite build && wrangler dev --config wrangler.sophie.jsonc",
+    "cf:dev:caz": "VITE_EVENT=caz-and-dan vite build && wrangler dev --config wrangler.caz-and-dan.jsonc",
+    "deploy:sophie": "VITE_EVENT=sophies-last-rodeo vite build && wrangler deploy --config wrangler.sophie.jsonc",
+    "deploy:caz": "VITE_EVENT=caz-and-dan vite build && wrangler deploy --config wrangler.caz-and-dan.jsonc",
+    "admin:invite": "node scripts/create-admin-invite.mjs",
+    "dev:sophie": "VITE_EVENT=sophies-last-rodeo vite --host",
+    "dev:caz": "VITE_EVENT=caz-and-dan vite --host"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.2",

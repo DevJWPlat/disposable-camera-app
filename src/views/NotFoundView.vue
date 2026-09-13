@@ -3,6 +3,7 @@ import { useRouter } from 'vue-router'
 
 import leopardPattern from '@/assets/images/leopard-pattern.png'
 import leopard from '@/assets/images/leopard.png'
+import { eventConfig } from '@/config/event.js'
 
 const router = useRouter()
 
@@ -26,12 +27,12 @@ function goHome() {
 
       <header class="page-header">
         <div class="film-details">
-          <span>PP 60</span>
+          <span>CAM</span>
           <span>ISO 400</span>
         </div>
 
         <p class="eyebrow">
-          Paul’s disposable camera
+          {{ eventConfig.title }}
         </p>
 
         <h1>
@@ -47,7 +48,7 @@ function goHome() {
             aria-hidden="true"
           >
             <span>ERROR</span>
-            <span>PP 60</span>
+            <span>CAM</span>
           </div>
 
           <div class="film-centre">
