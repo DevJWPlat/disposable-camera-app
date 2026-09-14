@@ -4,7 +4,7 @@
   "compatibility_date": "2026-03-20",
   "assets": {
     "binding": "ASSETS",
-    "directory": "./dist",
+    "directory": "./dist/caz-and-dan",
     "not_found_handling": "single-page-application"
   },
   "vars": {
