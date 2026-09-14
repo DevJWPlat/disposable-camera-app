@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   shots_taken INTEGER NOT NULL DEFAULT 0,
   shots_remaining INTEGER NOT NULL DEFAULT 25,
   status TEXT NOT NULL DEFAULT 'active',
+  preview_photo_id TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   FOREIGN KEY (event_id) REFERENCES events(id)
@@ -93,6 +94,7 @@ CREATE TABLE IF NOT EXISTS export_jobs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_event_device ON sessions(event_id, device_token);
+CREATE INDEX IF NOT EXISTS idx_sessions_preview_photo ON sessions(preview_photo_id);
 CREATE INDEX IF NOT EXISTS idx_photos_event_uploaded ON photos(event_id, uploaded_at);
 CREATE INDEX IF NOT EXISTS idx_admin_users_event_email ON admin_users(event_id, email);
 CREATE INDEX IF NOT EXISTS idx_admin_sessions_token ON admin_sessions(token_hash);

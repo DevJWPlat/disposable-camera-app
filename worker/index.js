@@ -281,6 +281,156 @@ export default {
       }
     }
 
+
+    if (url.pathname === '/api/session/secret-preview' && request.method === 'GET') {
+      try {
+        const sessionId = String(url.searchParams.get('sessionId') || '').trim()
+        const deviceToken = String(url.searchParams.get('deviceToken') || '').trim()
+
+        if (!sessionId || !deviceToken) {
+          return json(request, { ok: false, error: 'Missing session details' }, 400)
+        }
+
+        const event = await getEvent(env)
+        if (!event) return json(request, { ok: false, error: 'Event is not available' }, 404)
+
+        const session = await env.DB.prepare(
+          `SELECT id, event_id, device_token, shots_remaining, status, preview_photo_id
+           FROM sessions
+           WHERE id = ? AND event_id = ? AND device_token = ?
+           LIMIT 1`,
+        ).bind(sessionId, event.id, deviceToken).first()
+
+        if (!session) return json(request, { ok: false, error: 'Session not found' }, 404)
+        if (Number(session.shots_remaining) > 0) {
+          return json(request, { ok: false, error: 'Finish your roll before unlocking a preview' }, 403)
+        }
+
+        return json(request, {
+          ok: true,
+          unlocked: Boolean(session.preview_photo_id),
+          imageUrl: session.preview_photo_id
+            ? `${url.origin}/api/session/secret-preview/image?sessionId=${encodeURIComponent(sessionId)}&deviceToken=${encodeURIComponent(deviceToken)}`
+            : null,
+        })
+      } catch (error) {
+        return json(request, { ok: false, error: error?.message || 'Could not check preview' }, 500)
+      }
+    }
+
+    if (url.pathname === '/api/session/secret-preview' && request.method === 'POST') {
+      try {
+        const body = await readJson(request)
+        const sessionId = String(body.sessionId || '').trim()
+        const deviceToken = String(body.deviceToken || '').trim()
+
+        if (!sessionId || !deviceToken) {
+          return json(request, { ok: false, error: 'Missing session details' }, 400)
+        }
+
+        const event = await getEvent(env)
+        if (!event) return json(request, { ok: false, error: 'Event is not available' }, 404)
+
+        const session = await env.DB.prepare(
+          `SELECT id, event_id, device_token, shots_remaining, status, preview_photo_id
+           FROM sessions
+           WHERE id = ? AND event_id = ? AND device_token = ?
+           LIMIT 1`,
+        ).bind(sessionId, event.id, deviceToken).first()
+
+        if (!session) return json(request, { ok: false, error: 'Session not found' }, 404)
+        if (Number(session.shots_remaining) > 0) {
+          return json(request, { ok: false, error: 'Finish your roll before unlocking a preview' }, 403)
+        }
+
+        let previewPhotoId = session.preview_photo_id
+
+        if (!previewPhotoId) {
+          let photo = await env.DB.prepare(
+            `SELECT id
+             FROM photos
+             WHERE event_id = ? AND session_id <> ?
+             ORDER BY RANDOM()
+             LIMIT 1`,
+          ).bind(event.id, session.id).first()
+
+          // If nobody else has uploaded yet, still give them one permanent preview
+          // from the event rather than leaving the feature broken.
+          if (!photo) {
+            photo = await env.DB.prepare(
+              `SELECT id
+               FROM photos
+               WHERE event_id = ?
+               ORDER BY RANDOM()
+               LIMIT 1`,
+            ).bind(event.id).first()
+          }
+
+          if (!photo) {
+            return json(request, {
+              ok: false,
+              error: 'No photographs are available to preview yet. Try again a little later.',
+            }, 404)
+          }
+
+          const now = new Date().toISOString()
+          await env.DB.prepare(
+            `UPDATE sessions
+             SET preview_photo_id = COALESCE(preview_photo_id, ?), updated_at = ?
+             WHERE id = ? AND event_id = ?`,
+          ).bind(photo.id, now, session.id, event.id).run()
+
+          const updated = await env.DB.prepare(
+            `SELECT preview_photo_id FROM sessions WHERE id = ? AND event_id = ? LIMIT 1`,
+          ).bind(session.id, event.id).first()
+
+          previewPhotoId = updated?.preview_photo_id || photo.id
+        }
+
+        return json(request, {
+          ok: true,
+          unlocked: true,
+          imageUrl: `${url.origin}/api/session/secret-preview/image?sessionId=${encodeURIComponent(sessionId)}&deviceToken=${encodeURIComponent(deviceToken)}`,
+        })
+      } catch (error) {
+        return json(request, { ok: false, error: error?.message || 'Could not unlock preview' }, 500)
+      }
+    }
+
+    if (url.pathname === '/api/session/secret-preview/image' && request.method === 'GET') {
+      try {
+        const sessionId = String(url.searchParams.get('sessionId') || '').trim()
+        const deviceToken = String(url.searchParams.get('deviceToken') || '').trim()
+
+        if (!sessionId || !deviceToken) return textResponse(request, 'Image not found', 404)
+
+        const event = await getEvent(env)
+        if (!event) return textResponse(request, 'Image not found', 404)
+
+        const photo = await env.DB.prepare(
+          `SELECT p.r2_key
+           FROM sessions s
+           JOIN photos p ON p.id = s.preview_photo_id AND p.event_id = s.event_id
+           WHERE s.id = ? AND s.event_id = ? AND s.device_token = ?
+           LIMIT 1`,
+        ).bind(sessionId, event.id, deviceToken).first()
+
+        if (!photo?.r2_key) return textResponse(request, 'Image not found', 404)
+
+        const object = await env.PHOTOS.get(photo.r2_key)
+        if (!object) return textResponse(request, 'Image not found', 404)
+
+        const headers = new Headers(corsHeaders(request))
+        object.writeHttpMetadata(headers)
+        headers.set('etag', object.httpEtag)
+        headers.set('Cache-Control', 'private, no-store')
+
+        return new Response(object.body, { headers })
+      } catch {
+        return textResponse(request, 'Image not found', 404)
+      }
+    }
+
     if (url.pathname === '/api/admin/setup/verify' && request.method === 'POST') {
       const body = await readJson(request)
       const email = String(body.email || '').trim().toLowerCase()
