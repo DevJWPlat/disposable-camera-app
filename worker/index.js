@@ -147,6 +147,190 @@ async function readJson(request) {
   }
 }
 
+
+const ZIP_CRC_TABLE = (() => {
+  const table = new Uint32Array(256)
+
+  for (let n = 0; n < 256; n += 1) {
+    let c = n
+    for (let k = 0; k < 8; k += 1) {
+      c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1
+    }
+    table[n] = c >>> 0
+  }
+
+  return table
+})()
+
+function zipCrc32Update(crc, bytes) {
+  let value = crc >>> 0
+
+  for (let i = 0; i < bytes.length; i += 1) {
+    value = ZIP_CRC_TABLE[(value ^ bytes[i]) & 0xff] ^ (value >>> 8)
+  }
+
+  return value >>> 0
+}
+
+function zipDosDateTime(date = new Date()) {
+  const year = Math.max(1980, date.getFullYear())
+
+  return {
+    time:
+      ((date.getHours() & 0x1f) << 11) |
+      ((date.getMinutes() & 0x3f) << 5) |
+      ((Math.floor(date.getSeconds() / 2)) & 0x1f),
+    date:
+      (((year - 1980) & 0x7f) << 9) |
+      (((date.getMonth() + 1) & 0x0f) << 5) |
+      (date.getDate() & 0x1f),
+  }
+}
+
+function zipBytes(length, writer) {
+  const bytes = new Uint8Array(length)
+  const view = new DataView(bytes.buffer)
+  writer(view)
+  return bytes
+}
+
+function zipExtension(key) {
+  const match = String(key || '').toLowerCase().match(/\.([a-z0-9]{1,5})$/)
+  const extension = match?.[1] || 'jpg'
+  return /^[a-z0-9]{1,5}$/.test(extension) ? extension : 'jpg'
+}
+
+function streamPhotoZip(env, photos) {
+  const encoder = new TextEncoder()
+
+  return new ReadableStream({
+    async start(controller) {
+      let written = 0
+      const centralEntries = []
+
+      const enqueue = (bytes) => {
+        controller.enqueue(bytes)
+        written += bytes.byteLength
+      }
+
+      try {
+        for (let index = 0; index < photos.length; index += 1) {
+          const photo = photos[index]
+          const object = await env.PHOTOS.get(photo.r2_key)
+
+          if (!object?.body) {
+            throw new Error(`Photo ${photo.id} could not be read from storage`)
+          }
+
+          const extension = zipExtension(photo.r2_key)
+          const filename = `photo-${String(index + 1).padStart(4, '0')}.${extension}`
+          const nameBytes = encoder.encode(filename)
+          const stamp = zipDosDateTime(photo.uploaded_at ? new Date(photo.uploaded_at) : new Date())
+          const localOffset = written
+
+          const localHeader = zipBytes(30 + nameBytes.length, (view) => {
+            let offset = 0
+            view.setUint32(offset, 0x04034b50, true); offset += 4
+            view.setUint16(offset, 20, true); offset += 2
+            view.setUint16(offset, 0x0008, true); offset += 2
+            view.setUint16(offset, 0, true); offset += 2
+            view.setUint16(offset, stamp.time, true); offset += 2
+            view.setUint16(offset, stamp.date, true); offset += 2
+            view.setUint32(offset, 0, true); offset += 4
+            view.setUint32(offset, 0, true); offset += 4
+            view.setUint32(offset, 0, true); offset += 4
+            view.setUint16(offset, nameBytes.length, true); offset += 2
+            view.setUint16(offset, 0, true); offset += 2
+            new Uint8Array(view.buffer, offset, nameBytes.length).set(nameBytes)
+          })
+
+          enqueue(localHeader)
+
+          const reader = object.body.getReader()
+          let crc = 0xffffffff
+          let size = 0
+
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            if (!value?.byteLength) continue
+
+            crc = zipCrc32Update(crc, value)
+            size += value.byteLength
+            enqueue(value)
+          }
+
+          crc = (crc ^ 0xffffffff) >>> 0
+
+          const descriptor = zipBytes(16, (view) => {
+            view.setUint32(0, 0x08074b50, true)
+            view.setUint32(4, crc, true)
+            view.setUint32(8, size >>> 0, true)
+            view.setUint32(12, size >>> 0, true)
+          })
+          enqueue(descriptor)
+
+          centralEntries.push({
+            nameBytes,
+            crc,
+            size: size >>> 0,
+            offset: localOffset >>> 0,
+            time: stamp.time,
+            date: stamp.date,
+          })
+        }
+
+        const centralStart = written
+
+        for (const entry of centralEntries) {
+          const centralHeader = zipBytes(46 + entry.nameBytes.length, (view) => {
+            let offset = 0
+            view.setUint32(offset, 0x02014b50, true); offset += 4
+            view.setUint16(offset, 20, true); offset += 2
+            view.setUint16(offset, 20, true); offset += 2
+            view.setUint16(offset, 0x0008, true); offset += 2
+            view.setUint16(offset, 0, true); offset += 2
+            view.setUint16(offset, entry.time, true); offset += 2
+            view.setUint16(offset, entry.date, true); offset += 2
+            view.setUint32(offset, entry.crc, true); offset += 4
+            view.setUint32(offset, entry.size, true); offset += 4
+            view.setUint32(offset, entry.size, true); offset += 4
+            view.setUint16(offset, entry.nameBytes.length, true); offset += 2
+            view.setUint16(offset, 0, true); offset += 2
+            view.setUint16(offset, 0, true); offset += 2
+            view.setUint16(offset, 0, true); offset += 2
+            view.setUint16(offset, 0, true); offset += 2
+            view.setUint32(offset, 0, true); offset += 4
+            view.setUint32(offset, entry.offset, true); offset += 4
+            new Uint8Array(view.buffer, offset, entry.nameBytes.length).set(entry.nameBytes)
+          })
+
+          enqueue(centralHeader)
+        }
+
+        const centralSize = written - centralStart
+        const count = centralEntries.length
+
+        const end = zipBytes(22, (view) => {
+          view.setUint32(0, 0x06054b50, true)
+          view.setUint16(4, 0, true)
+          view.setUint16(6, 0, true)
+          view.setUint16(8, count, true)
+          view.setUint16(10, count, true)
+          view.setUint32(12, centralSize >>> 0, true)
+          view.setUint32(16, centralStart >>> 0, true)
+          view.setUint16(20, 0, true)
+        })
+
+        enqueue(end)
+        controller.close()
+      } catch (error) {
+        controller.error(error)
+      }
+    },
+  })
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url)
@@ -616,6 +800,42 @@ export default {
         }))
 
         return json(request, { ok: true, photos })
+      }
+
+      if (url.pathname === '/api/admin/download-zip' && request.method === 'POST') {
+        const body = await readJson(request)
+        const rawIds = Array.isArray(body.ids) ? body.ids : []
+        const ids = [...new Set(rawIds.map((id) => String(id || '').trim()).filter(Boolean))]
+
+        if (!ids.length) {
+          return json(request, { ok: false, error: 'Select at least one photo' }, 400)
+        }
+
+        if (ids.length > 5000) {
+          return json(request, { ok: false, error: 'Too many photos selected for one download' }, 400)
+        }
+
+        const results = await env.DB.prepare(
+          `SELECT id, r2_key, uploaded_at
+           FROM photos
+           WHERE event_id = ?
+           ORDER BY uploaded_at DESC`,
+        ).bind(admin.eventId).all()
+
+        const byId = new Map((results.results || []).map((photo) => [String(photo.id), photo]))
+        const photos = ids.map((id) => byId.get(id)).filter(Boolean)
+
+        if (!photos.length) {
+          return json(request, { ok: false, error: 'The selected photos could not be found' }, 404)
+        }
+
+        const headers = new Headers(corsHeaders(request))
+        headers.set('Content-Type', 'application/zip')
+        headers.set('Content-Disposition', 'attachment; filename="sophies-last-rodeo-photos.zip"')
+        headers.set('Cache-Control', 'no-store')
+        headers.set('X-Content-Type-Options', 'nosniff')
+
+        return new Response(streamPhotoZip(env, photos), { headers })
       }
 
       if (url.pathname === '/api/admin/image' && request.method === 'GET') {

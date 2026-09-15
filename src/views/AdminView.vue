@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { API_BASE_URL } from '@/utils/api.js'
 import { eventConfig } from '@/config/event.js'
@@ -16,6 +16,14 @@ import mailIcon from '@/assets/events/sophies-last-rodeo/mail.png'
 import lockIcon from '@/assets/events/sophies-last-rodeo/lock.png'
 import eyeOpenIcon from '@/assets/events/sophies-last-rodeo/eye-open.png'
 import eyeClosedIcon from '@/assets/events/sophies-last-rodeo/eye-closed.png'
+import galleryLockedScreen from '@/assets/events/sophies-last-rodeo/gallery-locked-screen-final-v3.png'
+import galleryUnlockedScreen from '@/assets/events/sophies-last-rodeo/gallery-unlocked-screen-v2.png'
+import galleryLockedMobile from '@/assets/events/sophies-last-rodeo/gallery-locked-mobile-final.png'
+import galleryUnlockedMobile from '@/assets/events/sophies-last-rodeo/gallery-unlocked-mobile-v2.png'
+import galleryLockedButton from '@/assets/events/sophies-last-rodeo/gallery-locked-button.png'
+import galleryUnlockedButton from '@/assets/events/sophies-last-rodeo/gallery-unlocked-button.png'
+import noticeBoardDesktop from '@/assets/events/sophies-last-rodeo/admin-notice-board-desktop.png'
+import noticeBoardMobile from '@/assets/events/sophies-last-rodeo/admin-notice-board-mobile.png'
 
 const router = useRouter()
 
@@ -34,7 +42,47 @@ const error = ref('')
 const admin = ref(null)
 const stats = ref(null)
 const photos = ref([])
-const stage = ref('dashboard')
+const stage = ref('unlock')
+const animatedShotsTaken = ref(0)
+let shotsAnimationFrame = 0
+
+function openNoticeBoard() {
+  stage.value = 'notice'
+  animatedShotsTaken.value = 0
+
+  if (shotsAnimationFrame) {
+    cancelAnimationFrame(shotsAnimationFrame)
+  }
+
+  const target = Math.max(0, Number(stats.value?.photos ?? photos.value.length ?? 0))
+  const duration = 900
+  const startedAt = performance.now()
+
+  const tick = (now) => {
+    const progress = Math.min(1, (now - startedAt) / duration)
+    const eased = 1 - Math.pow(1 - progress, 3)
+    animatedShotsTaken.value = Math.round(target * eased)
+
+    if (progress < 1) {
+      shotsAnimationFrame = requestAnimationFrame(tick)
+    } else {
+      animatedShotsTaken.value = target
+      shotsAnimationFrame = 0
+    }
+  }
+
+  shotsAnimationFrame = requestAnimationFrame(tick)
+}
+
+
+const galleryUnlockAt = new Date('2026-09-21T09:00:00+01:00')
+const testingUnlockEnabled = true
+
+const isGalleryUnlocked = computed(() => {
+  return testingUnlockEnabled || Date.now() >= galleryUnlockAt.getTime()
+})
+
+const unlockDateLabel = 'Monday 21st September at 9:00am'
 
 const isLoggedIn = computed(() => Boolean(admin.value))
 const themeStyle = computed(() => ({
@@ -102,7 +150,7 @@ async function logout() {
   admin.value = null
   stats.value = null
   photos.value = []
-  stage.value = 'dashboard'
+  stage.value = 'unlock'
 }
 
 async function refreshData() {
@@ -124,11 +172,17 @@ async function refreshData() {
 }
 
 onMounted(restore)
+
+onBeforeUnmount(() => {
+  if (shotsAnimationFrame) {
+    cancelAnimationFrame(shotsAnimationFrame)
+  }
+})
 </script>
 
 <template>
   <main class="admin-page" :class="`theme--${eventConfig.theme}`" :style="themeStyle">
-    <section class="shell">
+    <section class="shell" :class="{ 'shell--wide': isLoggedIn && (stage === 'unlock' || stage === 'notice' || stage === 'gallery') }" style="padding: 0;">
       <div v-if="loading" class="state">Loading admin…</div>
 
       <section v-else-if="!isLoggedIn" class="admin-login-poster">
@@ -236,13 +290,18 @@ onMounted(restore)
       </section>
 
       <template v-else>
-        <header class="toolbar">
+        <header v-if="stage !== 'unlock' && stage !== 'notice'" class="toolbar">
           <div>
             <small>{{ eventConfig.shortTitle }}</small>
             <strong>Admin</strong>
           </div>
           <div class="toolbar-actions">
-            <button type="button" :disabled="refreshing" @click="refreshData">
+            <button
+              v-if="stage !== 'gallery'"
+              type="button"
+              :disabled="refreshing"
+              @click="refreshData"
+            >
               {{ refreshing ? 'Refreshing…' : 'Refresh' }}
             </button>
             <button type="button" @click="logout">Log out</button>
@@ -251,7 +310,103 @@ onMounted(restore)
 
         <p v-if="error" class="error">{{ error }}</p>
 
-        <section v-if="stage === 'dashboard'" class="dashboard">
+        <section
+          v-if="stage === 'unlock'"
+          class="gallery-gate-shell"
+          :class="{ 'gallery-gate-shell--unlocked': isGalleryUnlocked }"
+        >
+          <header class="gallery-gate-topbar">
+            <div class="gallery-gate-brand">
+              <small>Sophie’s</small>
+              <strong>Last Rodeo ★</strong>
+            </div>
+
+            <div class="gallery-gate-topbar__actions">
+              <button
+                type="button"
+                :disabled="refreshing"
+                @click="refreshData"
+              >
+                {{ refreshing ? 'Refreshing…' : 'Refresh' }}
+              </button>
+              <button type="button" @click="logout">Log out</button>
+            </div>
+          </header>
+
+          <div class="gallery-gate">
+            <picture class="gallery-gate__picture">
+              <source
+                media="(max-width: 499px)"
+                :srcset="isGalleryUnlocked ? galleryUnlockedMobile : galleryLockedMobile"
+              />
+              <img
+                class="gallery-gate__screen"
+                :src="isGalleryUnlocked ? galleryUnlockedScreen : galleryLockedScreen"
+                :alt="isGalleryUnlocked ? 'The gallery is unlocked' : 'The gallery is locked'"
+              />
+            </picture>
+
+            <button
+              class="gallery-gate__continue"
+              type="button"
+              :disabled="!isGalleryUnlocked"
+              :aria-label="isGalleryUnlocked ? 'Continue to photos' : 'Photos are locked until the gallery opens'"
+              @click="openNoticeBoard"
+            >
+              <img
+                :src="isGalleryUnlocked ? galleryUnlockedButton : galleryLockedButton"
+                alt=""
+                aria-hidden="true"
+              />
+            </button>
+          </div>
+        </section>
+
+        <section v-else-if="stage === 'notice'" class="notice-board-shell">
+          <header class="gallery-gate-topbar">
+            <div class="gallery-gate-brand">
+              <small>Sophie’s</small>
+              <strong>Last Rodeo ★</strong>
+            </div>
+
+            <div class="gallery-gate-topbar__actions">
+              <button
+                type="button"
+                :disabled="refreshing"
+                @click="refreshData"
+              >
+                {{ refreshing ? 'Refreshing…' : 'Refresh' }}
+              </button>
+              <button type="button" @click="logout">Log out</button>
+            </div>
+          </header>
+
+          <div class="notice-board">
+            <picture class="notice-board__picture">
+              <source media="(max-width: 499px)" :srcset="noticeBoardMobile" />
+              <img
+                class="notice-board__screen"
+                :src="noticeBoardDesktop"
+                alt="Sophie’s Last Rodeo notice board with wanted poster and shots taken"
+              />
+            </picture>
+
+            <strong class="notice-board__count" aria-label="Photos taken">
+              {{ animatedShotsTaken }}
+            </strong>
+
+            <button
+              class="notice-board__continue"
+              type="button"
+              aria-label="Continue to gallery"
+              @click="stage = 'gallery'"
+            >
+              <img :src="galleryUnlockedButton" alt="" aria-hidden="true" />
+            </button>
+          </div>
+        </section>
+
+        <section v-else-if="stage === 'dashboard'" class="dashboard">
           <p class="eyebrow">{{ eventConfig.title }}</p>
           <h1>Event dashboard</h1>
           <p class="dashboard-copy">A simple view of the camera activity and gallery.</p>
@@ -306,6 +461,7 @@ onMounted(restore)
   color:var(--event-surface);
 }
 .shell { width:min(100%,38rem); min-height:100svh; margin:0 auto; padding:max(1rem,env(safe-area-inset-top)) 1rem max(1rem,env(safe-area-inset-bottom)); }
+.shell--wide { width:min(100%,86rem); max-width:none; }
 .state { min-height:80svh; display:grid; place-items:center; color:rgba(255,255,255,.65); }
 .login-card { position:relative; display:grid; gap:.7rem; width:min(100%,28rem); margin:9vh auto 0; border:1px solid color-mix(in srgb,var(--event-accent) 55%,transparent); background:color-mix(in srgb,var(--event-camera) 88%,black); padding:1.6rem; box-shadow:.4rem .4rem 0 color-mix(in srgb,var(--event-accent) 70%,transparent); }
 .admin-badge { position:absolute; top:1rem; right:1rem; border:1px solid color-mix(in srgb,var(--event-accent) 50%,transparent); padding:.3rem .45rem; color:var(--event-accent); font-size:.5rem; font-weight:900; letter-spacing:.12em; text-transform:uppercase; }
@@ -320,6 +476,7 @@ button:disabled { cursor:not-allowed; opacity:.45; }
 .login-card button,.primary { border:0; background:var(--event-accent); color:var(--event-line); font-weight:900; }
 .error { color:#ffaaa1; }
 .toolbar { display:flex; align-items:center; justify-content:space-between; gap:1rem; padding-bottom:1rem; border-bottom:1px solid rgba(255,255,255,.1); }
+.shell--wide > .toolbar { padding: .85rem clamp(1rem, 3vw, 2rem); }
 .toolbar div:first-child { display:flex; flex-direction:column; }
 .toolbar small { color:var(--event-accent); font-size:.58rem; text-transform:uppercase; }
 .toolbar strong { margin-top:.1rem; font-family:Georgia,serif; font-size:1.25rem; }
@@ -331,6 +488,306 @@ button:disabled { cursor:not-allowed; opacity:.45; }
 .stats-grid strong { color:var(--event-surface); font-family:Georgia,serif; font-size:2.5rem; font-weight:500; }
 .small-stat { font-size:.82rem !important; line-height:1.35; }
 .primary { width:100%; margin-top:1rem; min-height:3.3rem; text-transform:uppercase; letter-spacing:.08em; }
+
+
+.gallery-gate-shell {
+  width: 100%;
+  min-height: calc(100svh - max(1rem, env(safe-area-inset-top)) - max(1rem, env(safe-area-inset-bottom)));
+  background: #17110f;
+}
+
+.gallery-gate-topbar {
+  display: flex;
+  min-height: 4.25rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid rgba(255,255,255,.14);
+  background: #211815;
+  padding: .65rem clamp(.8rem, 3vw, 2rem);
+}
+
+.gallery-gate-brand {
+  display: flex;
+  flex-direction: column;
+  line-height: .9;
+  text-transform: uppercase;
+}
+
+.gallery-gate-brand small {
+  color: #ef6888;
+  font-size: .66rem;
+  font-weight: 900;
+  letter-spacing: .04em;
+}
+
+.gallery-gate-brand strong {
+  margin-top: .18rem;
+  color: #f7e9dc;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: clamp(1.15rem, 2vw, 1.7rem);
+  font-weight: 900;
+  letter-spacing: .02em;
+}
+
+.gallery-gate-topbar__actions {
+  display: flex;
+  gap: .45rem;
+}
+
+.gallery-gate-topbar__actions button {
+  min-height: 2.45rem;
+  border: 1px solid rgba(255,255,255,.45);
+  background: transparent;
+  color: #f7e9dc;
+  padding: .45rem .8rem;
+  cursor: pointer;
+  transition: background .15s ease, transform .15s ease;
+}
+
+.gallery-gate-topbar__actions button:hover:not(:disabled) {
+  background: rgba(255,255,255,.08);
+  transform: translateY(-1px);
+}
+
+.gallery-gate {
+  position: relative;
+  width: 100%;
+  height: auto;
+  min-height: 0vh;
+  overflow: hidden;
+  background: #f3cbc6;
+}
+
+.gallery-gate__picture {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.gallery-gate__screen {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+  user-select: none;
+  pointer-events: none;
+}
+
+.gallery-gate__continue {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  bottom: 0;
+  width: min(29.5rem, 31vw);
+  min-height: 0;
+  transform: translateX(-50%);
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  transition: transform .16s ease, filter .16s ease;
+}
+
+.gallery-gate-shell--unlocked .gallery-gate__continue {
+  bottom: 13.5%;
+}
+
+.gallery-gate__continue img {
+  display: block;
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 .45rem .7rem rgba(71,34,27,.24));
+}
+
+.gallery-gate__continue:hover:not(:disabled) {
+  transform: translateX(-50%) translateY(-3px) scale(1.018);
+  filter: brightness(1.05);
+}
+
+.gallery-gate__continue:active:not(:disabled) {
+  transform: translateX(-50%) scale(.985);
+}
+
+.gallery-gate__continue:disabled {
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+@media (max-width: 499px) {
+  .shell--wide {
+    width: 100%;
+    min-height: 100svh;
+    margin: 0;
+    padding: 0;
+  }
+
+  .gallery-gate-shell {
+    min-height: 100svh;
+  }
+
+  .gallery-gate-topbar {
+    min-height: 4rem;
+    padding-top: max(.6rem, env(safe-area-inset-top));
+    padding-right: .7rem;
+    padding-left: .7rem;
+  }
+
+  .gallery-gate-brand strong {
+    font-size: 1.05rem;
+  }
+
+  .gallery-gate-topbar__actions button {
+    min-height: 2.15rem;
+    padding: .3rem .55rem;
+    font-size: .68rem;
+  }
+
+  .gallery-gate {
+    height: calc(100svh - 4rem);
+    min-height: 0;
+  }
+
+  .gallery-gate__picture,
+  .gallery-gate__screen {
+    width: 100%;
+    height: 100%;
+  }
+
+  .gallery-gate__screen {
+    object-fit: cover;
+    object-position: center center;
+  }
+
+  .gallery-gate__continue {
+    bottom: max(1rem, calc(env(safe-area-inset-bottom) + 1rem));
+    width: min(84vw, 22rem);
+  }
+
+  .gallery-gate-shell--unlocked .gallery-gate__continue {
+    bottom: max(1rem, calc(env(safe-area-inset-bottom) + 1rem));
+  }
+}
+
+@media (min-width: 500px) {
+  .shell--wide {
+    width: 100%;
+    max-width: none;
+    padding-right: 0;
+    padding-left: 0;
+  }
+}
+
+
+.notice-board-shell {
+  width: 100%;
+  min-height: 100svh;
+  background: #17110f;
+}
+
+.notice-board {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  background: #f3cbc6;
+}
+
+.notice-board__picture {
+  display: block;
+  width: 100%;
+}
+
+.notice-board__screen {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+  pointer-events: none;
+}
+
+.notice-board__count {
+  position: absolute;
+  z-index: 3;
+  top: 49.5%;
+  left: 59.9%;
+  transform: translate(-50%, -50%);
+  color: #4d260f;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: clamp(5rem, 9vw, 10rem);
+  font-weight: 900;
+  line-height: .8;
+  text-align: center;
+  text-shadow:
+    0 .05em 0 rgba(255, 244, 210, .65),
+    0 .08em .04em rgba(79, 42, 18, .22);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 767px) {
+  .notice-board__count {
+    font-size: 50px;
+    left: 57%;
+  }
+}
+
+.notice-board__continue {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  bottom: 3.2%;
+  width: min(29.5rem, 31vw);
+  min-height: 0;
+  transform: translateX(-50%);
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  transition: transform .16s ease, filter .16s ease;
+}
+
+.notice-board__continue img {
+  display: block;
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 .45rem .7rem rgba(71,34,27,.24));
+}
+
+.notice-board__continue:hover {
+  transform: translateX(-50%) translateY(-3px) scale(1.018);
+  filter: brightness(1.05);
+}
+
+.notice-board__continue:active {
+  transform: translateX(-50%) scale(.985);
+}
+
+@media (max-width: 499px) {
+  .notice-board-shell {
+    min-height: 100svh;
+  }
+
+  .notice-board {
+    min-height: calc(100svh - 4rem);
+  }
+
+  .notice-board__picture,
+  .notice-board__screen {
+    width: 100%;
+    height: 100vh;
+  }
+
+  .notice-board__count {
+    top: 48.3%;
+    left: 65.1%;
+    font-size: 70px;
+  }
+
+  .notice-board__continue {
+    bottom: max(1rem, calc(env(safe-area-inset-bottom) + 1rem));
+    width: min(84vw, 22rem);
+  }
+}
 
 .event-home-link {
   display: block;
