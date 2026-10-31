@@ -1,0 +1,227 @@
+/* After Dark: full-bleed flash photo, bold condensed type, late-night glow.
+   Shared by every After Dark screen. Colours come from the event's settings
+   through the --ad-* variables set on .ad. */
+
+.ad {
+  --ad-glow: #c9b2ff;
+  --ad-pink: #ff5fa2;
+  --ad-bg: #050505;
+  --ad-text: #fff;
+  --ad-soft: rgba(255, 255, 255, 0.72);
+  --ad-line: rgba(255, 255, 255, 0.14);
+  --ad-sans: 'Inter', system-ui, sans-serif;
+
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  min-height: 100svh;
+  margin: 0 auto;
+  padding: 30px 24px calc(24px + env(safe-area-inset-bottom));
+  overflow-x: hidden;
+  background: var(--ad-bg);
+  color: var(--ad-text);
+  font-family: var(--ad-sans);
+  text-align: center;
+  -webkit-font-smoothing: antialiased;
+}
+
+.ad *,
+.ad *::before,
+.ad *::after {
+  box-sizing: border-box;
+}
+
+/* Grain over everything, never blocking taps. */
+.ad::after {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  content: '';
+  pointer-events: none;
+  opacity: 0.22;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.ad-inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 440px;
+}
+
+/* Full-bleed photo with dark fades top and bottom */
+.ad-photo {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 30%;
+  filter: contrast(1.08) saturate(1.05);
+}
+
+.ad-shade {
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.72) 0%, rgba(0, 0, 0, 0.15) 30%, rgba(0, 0, 0, 0.2) 52%, rgba(0, 0, 0, 0.92) 78%, #000 100%);
+}
+
+/* Bold condensed uppercase, squeezed horizontally like the design. */
+.ad-title {
+  width: 128%;
+  margin: 0 0 0 -14%;
+  font-family: 'Inter Display', var(--ad-sans);
+  font-size: clamp(46px, 14.8vw, 58px);
+  font-weight: 900;
+  line-height: 0.9;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  text-wrap: balance;
+  transform: scaleX(0.78);
+  transform-origin: center;
+  text-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+}
+
+.ad-date {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 12px 0 0;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.4em;
+}
+
+.ad-date::before,
+.ad-date::after {
+  width: 34px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.5);
+  content: '';
+}
+
+/* Small title and date at the top of the camera and finished screens */
+.ad-mini-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  transform: scaleX(0.82);
+}
+
+.ad-mini-date {
+  margin-top: 8px;
+  font-size: 10px;
+}
+
+.ad-tag {
+  margin: 0;
+  font-family: 'Inter Display', var(--ad-sans);
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: pre-line;
+  transform: scaleX(0.82);
+}
+
+.ad-sub {
+  margin: 8px 0 0;
+  color: var(--ad-soft);
+  font-size: 12px;
+  line-height: 1.5;
+  text-wrap: balance;
+}
+
+/* Glowing outline button */
+.ad-button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 18px;
+  border: 1.5px solid var(--ad-glow);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 13px;
+  color: #fff;
+  font: 700 12px/1.2 var(--ad-sans);
+  letter-spacing: 0.3em;
+  text-decoration: none;
+  box-shadow: 0 0 18px color-mix(in srgb, var(--ad-glow) 45%, transparent), inset 0 0 12px color-mix(in srgb, var(--ad-glow) 18%, transparent);
+  cursor: pointer;
+}
+
+.ad-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ad-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 14px 0 0;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.24em;
+}
+
+.ad-note svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+}
+
+.ad-note i {
+  width: 1px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.ad-spark {
+  position: fixed;
+  z-index: 1;
+  fill: #fff;
+  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.9));
+  animation: ad-twinkle 2.8s ease-in-out infinite;
+}
+
+@keyframes ad-twinkle {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.82); }
+}
+
+.ad-error {
+  margin: 12px 0 0;
+  color: #ff8fb8;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ad *,
+  .ad *::before,
+  .ad *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

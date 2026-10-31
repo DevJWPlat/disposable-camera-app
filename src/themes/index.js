@@ -2,9 +2,11 @@
 // driven by settings stored per event. Bespoke designs (Caz & Dan, Sophie)
 // keep their own config in src/config/events/ for now.
 import softFilm from './soft-film/settings.js'
+import afterDark from './after-dark/settings.js'
 
 export const themes = {
   [softFilm.key]: softFilm,
+  [afterDark.key]: afterDark,
 }
 
 function isPlainObject(value) {

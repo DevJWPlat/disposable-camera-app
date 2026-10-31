@@ -36,6 +36,15 @@ const themeViews = {
     join: NotFoundView,
     guestGallery: () => import('@/themes/soft-film/SoftFilmGuestGallery.vue'),
   },
+  'after-dark': {
+    landing: () => import('@/themes/after-dark/AfterDarkLanding.vue'),
+    camera: () => import('@/themes/after-dark/AfterDarkCamera.vue'),
+    finished: () => import('@/themes/after-dark/AfterDarkFinished.vue'),
+    admin: () => import('@/themes/after-dark/AfterDarkAdmin.vue'),
+    adminSetup: () => import('@/themes/after-dark/AfterDarkAdminSetup.vue'),
+    join: NotFoundView,
+    guestGallery: () => import('@/themes/after-dark/AfterDarkGuestGallery.vue'),
+  },
   'sophies-last-rodeo': {
     ...defaultViews,
     camera: () => import('@/views/SophieCameraView.vue'),

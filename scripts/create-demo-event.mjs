@@ -27,6 +27,17 @@ const DEMOS = {
     },
     files: ['party-1.jpg', 'party-2.jpg', 'party-3.jpg'],
   },
+  'after-dark': {
+    slug: 'after-dark-demo',
+    title: 'Hannah’s Last Night Out',
+    eventDate: '2027-05-15',
+    maxShots: 25,
+    settings: {
+      heroPhoto: 'night-1.jpg',
+      guestSharing: true,
+    },
+    files: ['night-1.jpg', 'night-2.jpg', 'night-3.jpg'],
+  },
 }
 
 const args = process.argv.slice(2)
