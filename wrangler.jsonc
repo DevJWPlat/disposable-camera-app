@@ -1,10 +1,15 @@
 // The single app that serves every event (step 1 of the single-app plan).
 // The old per-event configs (wrangler.caz-and-dan.jsonc, wrangler.sophie.jsonc)
-// stay in use until cutover in patch 06. Don't deploy this one yet.
+// stay in use until cutover.
 {
   "name": "odc-events",
   "main": "worker/index.js",
   "compatibility_date": "2026-03-20",
+  // Test addresses only (patch 06). The live addresses move here at cutover.
+  "routes": [
+    { "pattern": "sophies-last-rodeo.onlinedisposablecamera.co.uk", "custom_domain": true },
+    { "pattern": "test-caz-and-dan.onlinedisposablecamera.co.uk", "custom_domain": true }
+  ],
   "assets": {
     "binding": "ASSETS",
     "directory": "./dist/app",
