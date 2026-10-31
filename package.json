@@ -21,7 +21,8 @@
     "deploy:caz": "VITE_EVENT=caz-and-dan vite build && wrangler deploy --config wrangler.caz-and-dan.jsonc",
     "admin:invite": "node scripts/create-admin-invite.mjs",
     "dev:sophie": "VITE_EVENT=sophies-last-rodeo vite --host",
-    "dev:caz": "VITE_EVENT=caz-and-dan vite --host"
+    "dev:caz": "VITE_EVENT=caz-and-dan vite --host",
+    "db:local:setup": "wrangler d1 migrations apply odc-events-db --local && wrangler d1 execute odc-events-db --local --file=scripts/dev-seed.sql"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.2",

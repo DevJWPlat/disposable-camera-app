@@ -5,13 +5,14 @@ import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
 import tailwindcss from '@tailwindcss/vite'
 
-const eventSlug = process.env.VITE_EVENT || 'default'
-
+// VITE_EVENT is only set by the old per-event scripts (build:caz, deploy:sophie...).
+// A plain `vite build` makes the single app in dist/app.
+const outName = process.env.VITE_EVENT || 'app'
 
 // https://vite.dev/config/
 export default defineConfig({
   build: {
-    outDir: `dist/${eventSlug}`,
+    outDir: `dist/${outName}`,
     emptyOutDir: true,
   },
   plugins: [

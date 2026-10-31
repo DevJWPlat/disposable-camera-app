@@ -1,38 +1,54 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import LandingView from '@/views/LandingView.vue'
-import CazLandingView from '@/views/CazLandingView.vue'
-import CameraView from '@/views/CameraView.vue'
-import SophieCameraView from '@/views/SophieCameraView.vue'
-import CazCameraView from '@/views/CazCameraView.vue'
-import { eventConfig } from '@/config/event.js'
-import FinishedView from '@/views/FinishedView.vue'
-import SophieFinishedView from '@/views/SophieFinishedView.vue'
-import CazFinishedView from '@/views/CazFinishedView.vue'
-import AdminView from '@/views/AdminView.vue'
-import CazAdminView from '@/views/CazAdminView.vue'
-import AdminSetupView from '@/views/AdminSetupView.vue'
-import CazAdminSetupView from '@/views/CazAdminSetupView.vue'
-import CazJoinView from '@/views/CazJoinView.vue'
-import CazGuestGalleryView from '@/views/CazGuestGalleryView.vue'
-import NotFoundView from '@/views/NotFoundView.vue'
+import { eventConfig, eventMissing } from '@/config/event.js'
 
-const isCazAndDan = eventConfig.key === 'caz-and-dan'
-const ActiveLandingView = isCazAndDan ? CazLandingView : LandingView
-const ActiveCameraView = isCazAndDan ? CazCameraView : (eventConfig.key === 'sophies-last-rodeo' ? SophieCameraView : CameraView)
-const ActiveFinishedView = isCazAndDan ? CazFinishedView : (eventConfig.key === 'sophies-last-rodeo' ? SophieFinishedView : FinishedView)
-const ActiveAdminView = isCazAndDan ? CazAdminView : AdminView
-const ActiveAdminSetupView = isCazAndDan ? CazAdminSetupView : AdminSetupView
+// Each theme's views load only when needed, so one event's images and code
+// aren't downloaded on another event's site.
+const NotFoundView = () => import('@/views/NotFoundView.vue')
+const NoEventView = () => import('@/views/NoEventView.vue')
+
+const defaultViews = {
+  landing: () => import('@/views/LandingView.vue'),
+  camera: () => import('@/views/CameraView.vue'),
+  finished: () => import('@/views/FinishedView.vue'),
+  admin: () => import('@/views/AdminView.vue'),
+  adminSetup: () => import('@/views/AdminSetupView.vue'),
+  join: NotFoundView,
+  guestGallery: NotFoundView,
+}
+
+const themeViews = {
+  'caz-and-dan': {
+    landing: () => import('@/views/CazLandingView.vue'),
+    camera: () => import('@/views/CazCameraView.vue'),
+    finished: () => import('@/views/CazFinishedView.vue'),
+    admin: () => import('@/views/CazAdminView.vue'),
+    adminSetup: () => import('@/views/CazAdminSetupView.vue'),
+    join: () => import('@/views/CazJoinView.vue'),
+    guestGallery: () => import('@/views/CazGuestGalleryView.vue'),
+  },
+  'sophies-last-rodeo': {
+    ...defaultViews,
+    camera: () => import('@/views/SophieCameraView.vue'),
+    finished: () => import('@/views/SophieFinishedView.vue'),
+  },
+}
+
+const views = themeViews[eventConfig.key] || defaultViews
+
+const routes = eventMissing
+  ? [{ path: '/:pathMatch(.*)*', name: 'no-event', component: NoEventView }]
+  : [
+      { path: '/', name: 'landing', component: views.landing },
+      { path: '/camera', name: 'camera', component: views.camera },
+      { path: '/finished', name: 'finished', component: views.finished },
+      { path: '/admin', name: 'admin', component: views.admin },
+      { path: '/admin/setup', name: 'admin-setup', component: views.adminSetup },
+      { path: '/join', name: 'join', component: views.join },
+      { path: '/gallery/share/:token', name: 'guest-gallery', component: views.guestGallery },
+      { path: '/:pathMatch(.*)*', name: 'not-found', component: NotFoundView },
+    ]
 
 export default createRouter({
   history: createWebHistory(),
-  routes: [
-    { path: '/', name: 'landing', component: ActiveLandingView },
-    { path: '/camera', name: 'camera', component: ActiveCameraView },
-    { path: '/finished', name: 'finished', component: ActiveFinishedView },
-    { path: '/admin', name: 'admin', component: ActiveAdminView },
-    { path: '/admin/setup', name: 'admin-setup', component: ActiveAdminSetupView },
-    { path: '/join', name: 'join', component: isCazAndDan ? CazJoinView : NotFoundView },
-    { path: '/gallery/share/:token', name: 'guest-gallery', component: isCazAndDan ? CazGuestGalleryView : NotFoundView },
-    { path: '/:pathMatch(.*)*', name: 'not-found', component: NotFoundView },
-  ],
+  routes,
 })
