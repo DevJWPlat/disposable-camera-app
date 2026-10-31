@@ -1,8 +1,8 @@
 import sophie from './events/sophies-last-rodeo.js'
 import cazAndDan from './events/caz-and-dan.js'
+import { themes, mergeSettings } from '@/themes/index.js'
 
-// Bundled theme configs (copy, palette, images), keyed by theme.
-// These move into the database in step 2.
+// Bespoke designs with their own bundled config (copy, palette, images).
 const bundled = {
   [sophie.key]: sophie,
   [cazAndDan.key]: cazAndDan,
@@ -28,21 +28,40 @@ const noEvent = {
   maxShots: 25,
   copy: { landing: {}, camera: {}, finished: {} },
   palette: {},
+  settings: {},
 }
 
 function buildConfig() {
   if (runtime === null) return noEvent
   if (runtime === undefined) return bundled[fallbackKey] || sophie
 
+  const common = {
+    slug: runtime.slug,
+    title: runtime.title,
+    maxShots: Number(runtime.maxShots || 25),
+    galleryUnlockAt: runtime.galleryUnlockAt || null,
+    eventDate: runtime.eventDate,
+  }
+
+  // Ready-made theme: everything comes from theme defaults plus event settings.
+  const theme = themes[runtime.theme]
+  if (theme) {
+    return {
+      key: theme.key,
+      themeMeta: theme,
+      ...common,
+      settings: mergeSettings(theme.defaults, runtime.settings || {}),
+    }
+  }
+
+  // Bespoke design: bundled config, with the database winning where it has a value.
   const base = bundled[runtime.theme] || bundled[runtime.slug] || sophie
   return {
     ...base,
-    // The database is the source of truth for these.
-    slug: runtime.slug,
+    ...common,
     title: runtime.title || base.title,
     maxShots: Number(runtime.maxShots || base.maxShots || 25),
     galleryUnlockAt: runtime.galleryUnlockAt || base.galleryUnlockAt,
-    eventDate: runtime.eventDate,
     settings: runtime.settings || {},
   }
 }

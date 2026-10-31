@@ -81,6 +81,14 @@ function isCazEvent(event) {
   return event?.slug === 'caz-and-dan'
 }
 
+// Ready-made themes switch guest sharing on in settings. Caz & Dan keeps it
+// through its slug until step 3 moves that into its event record.
+function guestSharingAllowed(event) {
+  if (!event) return false
+  if (isCazEvent(event)) return true
+  return parseSettings(event).guestSharing === true
+}
+
 function cazGalleryUnlocked() {
   return Date.now() >= Date.parse('2026-10-11T08:00:00.000Z')
 }
@@ -508,6 +516,21 @@ export default {
       return json(request, { ok: true, event: publicEvent(event) }, 200, { 'Cache-Control': 'no-store' })
     }
 
+    // Photos chosen for this event's design (e.g. Soft Film's two prints).
+    // Stored at events/<id>/theme/<name> in the photo bucket.
+    if (url.pathname.startsWith('/api/event/image/') && request.method === 'GET') {
+      const name = decodeURIComponent(url.pathname.slice('/api/event/image/'.length))
+      const event = await getEvent()
+      if (!event || !/^[a-z0-9][a-z0-9._-]{0,80}$/i.test(name)) return textResponse(request, 'Image not found', 404)
+      const object = await env.PHOTOS.get(`events/${event.id}/theme/${name}`)
+      if (!object) return textResponse(request, 'Image not found', 404)
+      const headers = new Headers(corsHeaders(request))
+      object.writeHttpMetadata(headers)
+      headers.set('etag', object.httpEtag)
+      headers.set('Cache-Control', 'public, max-age=3600')
+      return new Response(object.body, { headers })
+    }
+
     // Local development only: /__dev/event/<slug> picks which event localhost shows.
     if (url.pathname.startsWith('/__dev/event/') && isLocalHost(url.hostname) && env.ALLOW_DEV_EVENT === 'true') {
       const slug = url.pathname.slice('/__dev/event/'.length).replace(/[^a-z0-9-]/gi, '')
@@ -791,7 +814,7 @@ export default {
       const ids = [...new Set(rawIds.map((id) => String(id || '').trim()).filter(Boolean))]
       const event = await getEvent()
 
-      if (!event || !isCazEvent(event) || !token) {
+      if (!event || !guestSharingAllowed(event) || !token) {
         return json(request, { ok: false, error: 'This gallery link is not available.' }, 404)
       }
 
@@ -840,7 +863,7 @@ export default {
       const variant = url.searchParams.get('variant') === 'thumbnail' ? 'thumbnail' : 'original'
       const event = await getEvent()
 
-      if (!event || !isCazEvent(event) || !token || !photoId) {
+      if (!event || !guestSharingAllowed(event) || !token || !photoId) {
         return textResponse(request, 'Image not found', 404)
       }
 
@@ -869,7 +892,7 @@ export default {
     if (url.pathname.startsWith('/api/gallery/share/') && request.method === 'GET') {
       const token = decodeURIComponent(url.pathname.slice('/api/gallery/share/'.length)).trim()
       const event = await getEvent()
-      if (!event || !isCazEvent(event) || !token) {
+      if (!event || !guestSharingAllowed(event) || !token) {
         return json(request, { ok: false, error: 'This gallery link is not available yet.' }, 404)
       }
 
@@ -1099,7 +1122,7 @@ export default {
 
       if (url.pathname === '/api/admin/gallery-share' && request.method === 'POST') {
         const event = await getEvent()
-        if (!event || !isCazEvent(event)) return json(request, { ok: false, error: 'Guest sharing is not available for this event.' }, 404)
+        if (!event || !guestSharingAllowed(event)) return json(request, { ok: false, error: 'Guest sharing is not available for this event.' }, 404)
 
         const body = await readJson(request)
         const enabled = body.enabled === true
@@ -1143,6 +1166,8 @@ export default {
           sessions: Number(sessionResult?.count || 0),
           maxShots: Number(event.max_shots || 25),
           latestUpload: photoResult?.latest || null,
+          galleryUnlockAt: event.gallery_unlock_at || null,
+          storageUntil: event.storage_until || null,
         })
       }
 
