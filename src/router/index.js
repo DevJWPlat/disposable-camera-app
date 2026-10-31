@@ -26,6 +26,13 @@ const themeViews = {
     join: () => import('@/views/CazJoinView.vue'),
     guestGallery: () => import('@/views/CazGuestGalleryView.vue'),
   },
+  // Ready-made theme. Organiser and guest gallery screens arrive in patch 11.
+  'soft-film': {
+    ...defaultViews,
+    landing: () => import('@/themes/soft-film/SoftFilmLanding.vue'),
+    camera: () => import('@/themes/soft-film/SoftFilmCamera.vue'),
+    finished: () => import('@/themes/soft-film/SoftFilmFinished.vue'),
+  },
   'sophies-last-rodeo': {
     ...defaultViews,
     camera: () => import('@/views/SophieCameraView.vue'),

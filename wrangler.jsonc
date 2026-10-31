@@ -10,7 +10,9 @@
   "routes": [
     { "pattern": "caz-and-dan.onlinedisposablecamera.co.uk", "custom_domain": true },
     { "pattern": "sophies-last-rodeo.party", "custom_domain": true },
-    { "pattern": "sophies-last-rodeo.onlinedisposablecamera.co.uk", "custom_domain": true }
+    { "pattern": "sophies-last-rodeo.onlinedisposablecamera.co.uk", "custom_domain": true },
+    // Theme demos
+    { "pattern": "soft-film-demo.onlinedisposablecamera.co.uk", "custom_domain": true }
   ],
   "assets": {
     "binding": "ASSETS",
