@@ -1,4 +1,5 @@
-// Soft Film: warm paper, film grain, taped prints, rust accents.
+// Soft Film: warm tones, tactile textures and a relaxed analogue look.
+// Made for garden parties and birthdays.
 // Every value here can be overridden per event in events.settings_json.
 export default {
   key: 'soft-film',
@@ -13,7 +14,7 @@ export default {
     // Two prints on the landing page. src is a file name uploaded for this
     // event (served from /api/event/image/<name>) or a full URL.
     photos: [
-      { src: '', caption: 'the big day' },
+      { src: '', caption: 'make a wish' },
       { src: '', caption: 'cheers!' },
     ],
     colours: {
@@ -31,7 +32,7 @@ export default {
       savingTitle: 'Developing',
       savingCopy: 'Keeping this one safe',
       finishedTitle: 'That’s a wrap',
-      finishedBody: 'Your roll is finished and every photo is safely stored. They’ll be ready for {names} once the gallery opens.',
+      finishedBody: 'Your roll is finished and every photo is safely stored. They’ll all be waiting in the gallery once it opens.',
     },
     // Lets the organiser switch on a shareable gallery link for guests.
     guestSharing: true,

@@ -14,14 +14,18 @@ const BUCKET = 'odc-event-photos'
 const DEMOS = {
   'soft-film': {
     slug: 'soft-film-demo',
-    title: 'Lucy & Tom',
-    eventDate: '2027-08-12',
+    title: 'Ellie’s 30th',
+    eventDate: '2027-06-19',
     maxShots: 25,
     settings: {
-      photos: [{ src: 'print-1.jpg' }, { src: 'print-2.jpg' }],
+      photos: [
+        { src: 'party-1.jpg', caption: 'make a wish' },
+        { src: 'party-2.jpg', caption: 'cheers!' },
+      ],
+      copy: { heading: 'GARDEN PARTY' },
       guestSharing: true,
     },
-    files: ['print-1.jpg', 'print-2.jpg'],
+    files: ['party-1.jpg', 'party-2.jpg', 'party-3.jpg'],
   },
 }
 
