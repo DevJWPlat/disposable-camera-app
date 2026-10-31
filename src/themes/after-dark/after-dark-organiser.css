@@ -541,7 +541,6 @@
 }
 
 .ad-org__title {
-  width: 128%;
   font-size: clamp(40px, 12.5vw, 50px);
 }
 

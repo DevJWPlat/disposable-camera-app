@@ -76,8 +76,10 @@
 
 /* Bold condensed uppercase, squeezed horizontally like the design. */
 .ad-title {
-  width: 128%;
-  margin: 0 0 0 -14%;
+  /* Overhangs equally on both sides, then the squeeze brings it back in,
+     so it stays centred whatever the screen width. */
+  align-self: stretch;
+  margin: 0 -14%;
   font-family: 'Inter Display', var(--ad-sans);
   font-size: clamp(46px, 14.8vw, 58px);
   font-weight: 900;
