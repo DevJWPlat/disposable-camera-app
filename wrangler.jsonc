@@ -10,9 +10,7 @@
   "routes": [
     { "pattern": "caz-and-dan.onlinedisposablecamera.co.uk", "custom_domain": true },
     { "pattern": "sophies-last-rodeo.party", "custom_domain": true },
-    { "pattern": "sophies-last-rodeo.onlinedisposablecamera.co.uk", "custom_domain": true },
-    // Test address from patch 06, removed in the clean-up patch.
-    { "pattern": "test-caz-and-dan.onlinedisposablecamera.co.uk", "custom_domain": true }
+    { "pattern": "sophies-last-rodeo.onlinedisposablecamera.co.uk", "custom_domain": true }
   ],
   "assets": {
     "binding": "ASSETS",
@@ -38,16 +36,6 @@
     {
       "binding": "PHOTOS",
       "bucket_name": "odc-event-photos"
-    },
-    // Old per-event buckets, read only by the one-off copy in patch 05.
-    // Removed once each event's storage period ends.
-    {
-      "binding": "LEGACY_PHOTOS_CAZ_AND_DAN",
-      "bucket_name": "caz-and-dan-photos"
-    },
-    {
-      "binding": "LEGACY_PHOTOS_SOPHIES_LAST_RODEO",
-      "bucket_name": "sophies-last-rodeo-photos"
     }
   ]
 }

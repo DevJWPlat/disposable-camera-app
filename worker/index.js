@@ -480,67 +480,6 @@ function streamPhotoZip(env, photos) {
   })
 }
 
-// TEMPORARY (patch 05). Copies photos in small batches so each call stays well
-// inside the Worker's per-request limits. Safe to re-run: anything already
-// copied with the same size is skipped.
-async function migrateCopyPhotos(request, env) {
-  const secret = env.MIGRATION_SECRET
-  const given = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '')
-  if (!secret || secret.length < 32 || (await sha256(given)) !== (await sha256(secret))) {
-    return new Response('Not found', { status: 404 })
-  }
-
-  const body = await readJson(request)
-  const slug = String(body.slug || '').replace(/[^a-z0-9-]/g, '')
-  const after = String(body.after || '')
-  const legacy = env[`LEGACY_PHOTOS_${slug.toUpperCase().replaceAll('-', '_')}`]
-  if (!slug || !legacy) return json(request, { ok: false, error: `No old bucket bound for ${slug}` }, 400)
-
-  const event = await env.DB.prepare(`SELECT id FROM events WHERE slug = ? LIMIT 1`).bind(slug).first()
-  if (!event) return json(request, { ok: false, error: `${slug} is not in the new database yet` }, 404)
-
-  const batch = 10
-  const { results = [] } = await env.DB.prepare(
-    `SELECT id, r2_key, thumbnail_r2_key, legacy_r2_key, legacy_thumbnail_r2_key
-     FROM photos
-     WHERE event_id = ? AND legacy_r2_key IS NOT NULL AND id > ?
-     ORDER BY id
-     LIMIT ?`,
-  ).bind(event.id, after, batch).all()
-
-  const counts = { copied: 0, alreadyThere: 0, missingInOld: 0 }
-  const missing = []
-
-  for (const photo of results) {
-    const pairs = [[photo.legacy_r2_key, photo.r2_key]]
-    if (photo.legacy_thumbnail_r2_key && photo.thumbnail_r2_key) {
-      pairs.push([photo.legacy_thumbnail_r2_key, photo.thumbnail_r2_key])
-    }
-    for (const [from, to] of pairs) {
-      const [existing, source] = await Promise.all([env.PHOTOS.head(to), legacy.head(from)])
-      if (!source) {
-        counts.missingInOld += 1
-        missing.push(from)
-        continue
-      }
-      if (existing && existing.size === source.size) {
-        counts.alreadyThere += 1
-        continue
-      }
-      const object = await legacy.get(from)
-      await env.PHOTOS.put(to, await object.arrayBuffer(), { httpMetadata: object.httpMetadata })
-      counts.copied += 1
-    }
-  }
-
-  return json(request, {
-    ok: true,
-    ...counts,
-    missing,
-    next: results.length === batch ? results[results.length - 1].id : null,
-  })
-}
-
 export default {
   async fetch(request, env) {
     const url = new URL(request.url)
@@ -550,12 +489,6 @@ export default {
 
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: corsHeaders(request) })
-    }
-
-    // TEMPORARY (patch 05): copies one old event's photos into the new bucket.
-    // Only works with the MIGRATION_SECRET secret. Removed after cutover.
-    if (url.pathname === '/__migrate/copy-photos' && request.method === 'POST') {
-      return migrateCopyPhotos(request, env)
     }
 
     if (url.pathname === '/api/health' && request.method === 'GET') {
