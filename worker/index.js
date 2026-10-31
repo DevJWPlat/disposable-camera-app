@@ -497,6 +497,15 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url)
 
+    // Backstop: the marketing site (main domain and www) is never served here.
+    // The www exclusion route should stop these reaching the Worker at all;
+    // if one does, pass it straight through untouched.
+    const appDomain = normaliseHost(env.APP_DOMAIN)
+    const host = normaliseHost(url.hostname)
+    if (appDomain && (host === appDomain || host === `www.${appDomain}`)) {
+      return fetch(request)
+    }
+
     let eventPromise = null
     const getEvent = () => (eventPromise ||= resolveEvent(request, env))
 

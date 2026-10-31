@@ -5,9 +5,12 @@
   "main": "worker/index.js",
   "compatibility_date": "2026-03-20",
   "workers_dev": false,
-  // Every address this app serves. Each one also needs a row in event_domains,
-  // or must be <slug>.onlinedisposablecamera.co.uk.
+  // Every address this app serves. Any <slug>.onlinedisposablecamera.co.uk
+  // reaches the Worker through the wildcard route; other domains need a
+  // custom domain here and a row in event_domains. www is excluded by a
+  // "no Worker" route in the dashboard, so the marketing site is untouched.
   "routes": [
+    { "pattern": "*.onlinedisposablecamera.co.uk/*", "zone_name": "onlinedisposablecamera.co.uk" },
     { "pattern": "caz-and-dan.onlinedisposablecamera.co.uk", "custom_domain": true },
     { "pattern": "sophies-last-rodeo.party", "custom_domain": true },
     { "pattern": "sophies-last-rodeo.onlinedisposablecamera.co.uk", "custom_domain": true },
