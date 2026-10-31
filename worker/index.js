@@ -1,3 +1,4 @@
+import { runStorageJob } from './storage.js'
 // The single app that serves every event. The event is chosen from the
 // request's hostname (see resolveEvent). The old per-event deployments run
 // worker/legacy.js until cutover.
@@ -488,6 +489,11 @@ function streamPhotoZip(env, photos) {
 }
 
 export default {
+  // Nightly storage job (Cron Trigger in wrangler.jsonc).
+  async scheduled(controller, env, ctx) {
+    ctx.waitUntil(runStorageJob(env).then((log) => console.log('[storage]', log.join(' | '))))
+  },
+
   async fetch(request, env) {
     const url = new URL(request.url)
 
