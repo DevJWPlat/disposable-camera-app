@@ -51,7 +51,8 @@ export function imageUrl(src) {
 // Replaces {names} and {shots} in theme copy.
 export function fillCopy(text) {
   return String(text || '')
-    .replaceAll('{names}', eventConfig.title || '')
+    // Non-breaking spaces keep a name like "Olivia & James" on one line.
+    .replaceAll('{names}', (eventConfig.title || '').replace(/ /g, '\u00a0'))
     .replaceAll('{shots}', String(eventConfig.maxShots || 25))
 }
 

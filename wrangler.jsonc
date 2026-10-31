@@ -13,7 +13,8 @@
     { "pattern": "sophies-last-rodeo.onlinedisposablecamera.co.uk", "custom_domain": true },
     // Theme demos
     { "pattern": "soft-film-demo.onlinedisposablecamera.co.uk", "custom_domain": true },
-    { "pattern": "after-dark-demo.onlinedisposablecamera.co.uk", "custom_domain": true }
+    { "pattern": "after-dark-demo.onlinedisposablecamera.co.uk", "custom_domain": true },
+    { "pattern": "classic-editorial-demo.onlinedisposablecamera.co.uk", "custom_domain": true }
   ],
   "assets": {
     "binding": "ASSETS",

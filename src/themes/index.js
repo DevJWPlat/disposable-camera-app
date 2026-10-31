@@ -3,10 +3,12 @@
 // keep their own config in src/config/events/ for now.
 import softFilm from './soft-film/settings.js'
 import afterDark from './after-dark/settings.js'
+import classicEditorial from './classic-editorial/settings.js'
 
 export const themes = {
   [softFilm.key]: softFilm,
   [afterDark.key]: afterDark,
+  [classicEditorial.key]: classicEditorial,
 }
 
 function isPlainObject(value) {

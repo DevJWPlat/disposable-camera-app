@@ -45,6 +45,15 @@ const themeViews = {
     join: NotFoundView,
     guestGallery: () => import('@/themes/after-dark/AfterDarkGuestGallery.vue'),
   },
+  'classic-editorial': {
+    landing: () => import('@/themes/classic-editorial/ClassicEditorialLanding.vue'),
+    camera: () => import('@/themes/classic-editorial/ClassicEditorialCamera.vue'),
+    finished: () => import('@/themes/classic-editorial/ClassicEditorialFinished.vue'),
+    admin: () => import('@/themes/classic-editorial/ClassicEditorialAdmin.vue'),
+    adminSetup: () => import('@/themes/classic-editorial/ClassicEditorialAdminSetup.vue'),
+    join: NotFoundView,
+    guestGallery: () => import('@/themes/classic-editorial/ClassicEditorialGuestGallery.vue'),
+  },
   'sophies-last-rodeo': {
     ...defaultViews,
     camera: () => import('@/views/SophieCameraView.vue'),

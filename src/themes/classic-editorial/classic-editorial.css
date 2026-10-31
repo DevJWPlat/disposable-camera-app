@@ -1,0 +1,166 @@
+/* Classic Editorial: ivory paper, Georgia serif, black buttons, torn-paper
+   photo edge. Shared by every Classic Editorial screen. Colours come from
+   the event's settings through the --ce-* variables set on .ce. */
+
+.ce {
+  --ce-paper: #f7f5ef;
+  --ce-ink: #111111;
+  --ce-muted: #6d6a65;
+  --ce-card: #fffef9;
+  --ce-line: #d8d5cd;
+  --ce-serif: Georgia, 'Times New Roman', serif;
+  --ce-sans: Montserrat, Arial, sans-serif;
+
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  min-height: 100svh;
+  margin: 0 auto;
+  padding: max(30px, env(safe-area-inset-top)) 22px max(26px, env(safe-area-inset-bottom));
+  overflow-x: hidden;
+  background: var(--ce-paper);
+  color: var(--ce-ink);
+  font-family: var(--ce-sans);
+  text-align: center;
+  -webkit-font-smoothing: antialiased;
+}
+
+.ce *,
+.ce *::before,
+.ce *::after {
+  box-sizing: border-box;
+}
+
+.ce-inner {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 430px;
+}
+
+.ce-names {
+  margin: 0;
+  font-family: var(--ce-serif);
+  font-size: clamp(30px, 8.6vw, 54px);
+  font-weight: 400;
+  line-height: 1.05;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+  text-wrap: balance;
+}
+
+/* Two hairlines with a heart between */
+.ce-heart-rule {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.ce-heart-rule span {
+  width: 52px;
+  height: 1px;
+  background: #777;
+}
+
+.ce-heart-rule b {
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.ce-date {
+  margin: 7px 0 0;
+  font-family: var(--ce-serif);
+  font-size: 20px;
+  letter-spacing: 0.24em;
+  text-indent: 0.24em;
+}
+
+.ce-eyebrow {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+
+.ce-heading {
+  margin: 8px 0 0;
+  font-family: var(--ce-serif);
+  font-size: clamp(32px, 9.5vw, 42px);
+  font-weight: 400;
+  line-height: 1.1;
+}
+
+.ce-body {
+  margin: 10px auto 0;
+  max-width: 340px;
+  color: var(--ce-muted);
+  font-size: 13px;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+.ce-italic {
+  margin: 0 auto;
+  max-width: 330px;
+  font-family: var(--ce-serif);
+  font-size: 21px;
+  font-style: italic;
+  line-height: 1.45;
+  white-space: pre-line;
+  text-wrap: balance;
+}
+
+.ce-button {
+  display: block;
+  width: 82%;
+  margin: 26px auto 0;
+  border: 0;
+  border-radius: 8px;
+  background: var(--ce-ink);
+  padding: 22px 16px;
+  color: #fff;
+  font-family: var(--ce-serif);
+  font-size: 17px;
+  letter-spacing: 0.16em;
+  text-decoration: none;
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+}
+
+.ce-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.ce-allowance {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 22px 0 0;
+  font-size: 13px;
+  letter-spacing: 0.2em;
+}
+
+.ce-allowance svg {
+  width: 28px;
+  height: 28px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+}
+
+.ce-error {
+  margin: 14px 0 0;
+  color: #9a3030;
+  font-size: 12px;
+  line-height: 1.4;
+}

@@ -38,6 +38,17 @@ const DEMOS = {
     },
     files: ['night-1.jpg', 'night-2.jpg', 'night-3.jpg'],
   },
+  'classic-editorial': {
+    slug: 'classic-editorial-demo',
+    title: 'Olivia & James',
+    eventDate: '2027-08-14',
+    maxShots: 25,
+    settings: {
+      heroPhoto: 'couple-1.jpg',
+      guestSharing: true,
+    },
+    files: ['couple-1.jpg', 'couple-2.jpg'],
+  },
 }
 
 const args = process.argv.slice(2)
