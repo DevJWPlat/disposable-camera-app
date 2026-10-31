@@ -1,32 +1,37 @@
+// The single app that serves every event (step 1 of the single-app plan).
+// The old per-event configs (wrangler.caz-and-dan.jsonc, wrangler.sophie.jsonc)
+// stay in use until cutover in patch 06. Don't deploy this one yet.
 {
-	"name": "disposable-camera-app",
-	"main": "worker/index.js",
-	"compatibility_date": "2026-03-20",
-	"assets": {
-		"binding": "ASSETS",
-		"directory": "./dist",
-		"not_found_handling": "single-page-application"
-	},
-	"d1_databases": [
-		{
-			"binding": "sophies_last_rodeo_db",
-			"database_name": "sophies-last-rodeo-db",
-			"database_id": "6ab44800-6547-410e-896b-8226b7cbb1fc"
-		},
-		{
-			"binding": "caz_and_dan_db",
-			"database_name": "caz-and-dan-db",
-			"database_id": "12bc0575-7eab-4485-81b1-972b880d4f91"
-		}
-	],
-	"r2_buckets": [
-		{
-			"bucket_name": "sophies-last-rodeo-photos",
-			"binding": "sophies_last_rodeo_photos"
-		},
-		{
-			"bucket_name": "caz-and-dan-photos",
-			"binding": "caz_and_dan_photos"
-		}
-	]
+  "name": "odc-events",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-03-20",
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "./dist/app",
+    "not_found_handling": "single-page-application"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "odc-events-db",
+      "database_id": "17dca8cf-69a7-4944-bf32-a5405c1cd79c",
+      "migrations_dir": "migrations-app"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "PHOTOS",
+      "bucket_name": "odc-event-photos"
+    },
+    // Old per-event buckets, read only by the one-off copy in patch 05.
+    // Removed once each event's storage period ends.
+    {
+      "binding": "LEGACY_PHOTOS_CAZ_AND_DAN",
+      "bucket_name": "caz-and-dan-photos"
+    },
+    {
+      "binding": "LEGACY_PHOTOS_SOPHIES_LAST_RODEO",
+      "bucket_name": "sophies-last-rodeo-photos"
+    }
+  ]
 }
