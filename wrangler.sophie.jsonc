@@ -1,26 +1,22 @@
+// ROLLBACK ONLY. Sophie's Last Rodeo now runs on the single app (wrangler.jsonc).
+// Its custom domain was removed from here so a deploy can't take it back by accident.
+// To roll back: add this to the object below, then run
+//   VITE_EVENT=sophies-last-rodeo npx vite build && npx wrangler deploy --config wrangler.sophie.jsonc
+// and answer y when asked to move the custom domain:
+//   "routes": [{ "pattern": "sophies-last-rodeo.party", "custom_domain": true }],
 {
   "name": "sophies-last-rodeo-camera",
   "main": "worker/legacy.js",
   "compatibility_date": "2026-03-20",
-
-  "routes": [
-    {
-      "pattern": "sophies-last-rodeo.party",
-      "custom_domain": true
-    }
-  ],
-
   "assets": {
     "binding": "ASSETS",
     "directory": "./dist/sophies-last-rodeo",
     "not_found_handling": "single-page-application"
   },
-
   "vars": {
     "EVENT_SLUG": "sophies-last-rodeo",
     "ADMIN_COOKIE_NAME": "sophie_camera_admin"
   },
-
   "d1_databases": [
     {
       "binding": "DB",
@@ -28,7 +24,6 @@
       "database_id": "6ab44800-6547-410e-896b-8226b7cbb1fc"
     }
   ],
-
   "r2_buckets": [
     {
       "binding": "PHOTOS",

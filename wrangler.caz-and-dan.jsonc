@@ -1,3 +1,8 @@
+// ROLLBACK ONLY. Caz & Dan now runs on the single app (wrangler.jsonc).
+// To roll back: add this to the object below, then run
+//   VITE_EVENT=caz-and-dan npx vite build && npx wrangler deploy --config wrangler.caz-and-dan.jsonc
+// and answer y when asked to move the custom domain:
+//   "routes": [{ "pattern": "caz-and-dan.onlinedisposablecamera.co.uk", "custom_domain": true }],
 {
   "name": "caz-and-dan-camera",
   "main": "worker/legacy.js",
