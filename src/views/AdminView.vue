@@ -95,14 +95,29 @@ function handleNoticeBoardLoaded() {
 }
 
 
-const galleryUnlockAt = new Date('2026-09-21T09:00:00+01:00')
+// Unlock time comes from the event record (events.gallery_unlock_at).
+const galleryUnlockAt = new Date(eventConfig.galleryUnlockAt || 0)
 const testingUnlockEnabled = false
 
 const isGalleryUnlocked = computed(() => {
   return testingUnlockEnabled || Date.now() >= galleryUnlockAt.getTime()
 })
 
-const unlockDateLabel = 'Monday 21st September at 9:00am'
+// e.g. "Monday 21st September at 9:00am", in UK time
+function ordinal(day) {
+  const n = Number(day)
+  const suffix = n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th'
+  return `${n}${suffix}`
+}
+
+function unlockLabelFor(date) {
+  if (Number.isNaN(date.getTime())) return ''
+  const part = (options) => new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', ...options }).format(date)
+  const time = part({ hour: 'numeric', minute: '2-digit', hour12: true }).replace(/\s/g, '').toLowerCase()
+  return `${part({ weekday: 'long' })} ${ordinal(part({ day: 'numeric' }))} ${part({ month: 'long' })} at ${time}`
+}
+
+const unlockDateLabel = unlockLabelFor(galleryUnlockAt)
 
 const isLoggedIn = computed(() => Boolean(admin.value))
 const themeStyle = computed(() => ({

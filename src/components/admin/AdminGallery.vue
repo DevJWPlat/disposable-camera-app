@@ -130,7 +130,7 @@ async function downloadSelected() {
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = 'sophies-last-rodeo-photos.zip'
+    link.download = `${eventConfig.slug}-photos.zip`
     document.body.appendChild(link)
     link.click()
     link.remove()

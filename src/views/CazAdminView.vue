@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { API_BASE_URL } from '@/utils/api.js'
 import { eventConfig } from '@/config/event.js'
+import { longDate, longDateTime } from '@/composables/eventFormat.js'
 import CazAdminGallery from '@/components/admin/CazAdminGallery.vue'
 
 const router=useRouter()
@@ -13,7 +14,8 @@ const galleryShare=ref({enabled:false,shareUrl:null}), sharingSaving=ref(false),
 const galleryUnlockAt=new Date(eventConfig.galleryUnlockAt)
 const testingUnlockEnabled = false
 const galleryUnlocked=computed(()=>testingUnlockEnabled || Date.now()>=galleryUnlockAt.getTime())
-const unlockLabel='11 October 2026 at 9:00am'
+const unlockLabel=longDateTime(eventConfig.galleryUnlockAt)
+const storageLabel=computed(()=>longDate(stats.value?.storageUntil))
 async function api(path,options={}){const response=await fetch(`${API_BASE_URL}${path}`,{credentials:'include',...options,headers:{...(options.body?{'Content-Type':'application/json'}:{}),...(options.headers||{})}});const data=await response.json().catch(()=>null);if(!response.ok||!data?.ok){if(response.status===401)admin.value=null;throw new Error(data?.error||`Request failed (${response.status})`)}return data}
 async function restore(){try{const data=await api('/api/admin/me');admin.value=data.admin;await refresh()}catch{admin.value=null}finally{loading.value=false}}
 async function login(){loggingIn.value=true;error.value='';try{const data=await api('/api/admin/login',{method:'POST',body:JSON.stringify({email:username.value,password:password.value})});admin.value=data.admin;password.value='';await refresh()}catch(err){error.value=err.message}finally{loggingIn.value=false}}
@@ -54,7 +56,7 @@ onMounted(restore)
           <i class="fa-regular fa-clock" aria-hidden="true"></i>
           <div>
             <strong>Photo storage</strong>
-            <span>All images will be deleted on 10 December 2026. If you want or need to extend this, speak to Jonny.</span>
+            <span>All images will be deleted on {{ storageLabel || 'the date agreed with Jonny' }}. If you want or need to extend this, speak to Jonny.</span>
           </div>
         </section>
         <div class="stats"><article><span>PARTICIPANTS</span><strong>{{ displayParticipants }}</strong></article><article><span>PHOTOS TAKEN</span><strong>{{ displayPhotos }}</strong></article></div>

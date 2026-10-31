@@ -77,20 +77,19 @@ function clearSessionCookie(env) {
   return `${cookieName(env)}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`
 }
 
-function isCazEvent(event) {
-  return event?.slug === 'caz-and-dan'
-}
-
-// Ready-made themes switch guest sharing on in settings. Caz & Dan keeps it
-// through its slug until step 3 moves that into its event record.
+// Guest sharing is switched on per event in settings_json.guestSharing.
 function guestSharingAllowed(event) {
-  if (!event) return false
-  if (isCazEvent(event)) return true
-  return parseSettings(event).guestSharing === true
+  return Boolean(event) && parseSettings(event).guestSharing === true
 }
 
-function cazGalleryUnlocked() {
-  return Date.now() >= Date.parse('2026-10-11T08:00:00.000Z')
+// The organiser and guest galleries stay shut until gallery_unlock_at.
+function galleryLocked(event) {
+  const at = Date.parse(event?.gallery_unlock_at || '')
+  return Number.isFinite(at) && Date.now() < at
+}
+
+function galleryLockedResponse(request) {
+  return json(request, { ok: false, locked: true, error: 'The gallery isn’t open yet.' }, 403)
 }
 
 function createShareToken() {
@@ -825,6 +824,7 @@ export default {
       if (!share || Number(share.enabled) !== 1) {
         return json(request, { ok: false, error: 'This gallery link has been switched off.' }, 404)
       }
+      if (galleryLocked(event)) return galleryLockedResponse(request)
 
       if (!ids.length) {
         return json(request, { ok: false, error: 'Select at least one photo.' }, 400)
@@ -870,7 +870,7 @@ export default {
       const share = await env.DB.prepare(
         `SELECT enabled FROM gallery_shares WHERE event_id = ? AND token = ? LIMIT 1`,
       ).bind(event.id, token).first()
-      if (!share || Number(share.enabled) !== 1) return textResponse(request, 'Image not found', 404)
+      if (!share || Number(share.enabled) !== 1 || galleryLocked(event)) return textResponse(request, 'Image not found', 404)
 
       const photo = await env.DB.prepare(
         `SELECT r2_key, thumbnail_r2_key FROM photos WHERE id = ? AND event_id = ? LIMIT 1`,
@@ -902,6 +902,7 @@ export default {
       if (!share || Number(share.enabled) !== 1) {
         return json(request, { ok: false, error: 'This gallery link has been switched off.' }, 404)
       }
+      if (galleryLocked(event)) return galleryLockedResponse(request)
 
       const results = await env.DB.prepare(
         `SELECT id, uploaded_at, thumbnail_r2_key FROM photos WHERE event_id = ? ORDER BY uploaded_at DESC`,
@@ -923,7 +924,8 @@ export default {
       const body = await readJson(request)
       const username = String(body.username || '').trim().toLowerCase()
       const event = await getEvent()
-      if (!event || !isCazEvent(event) || username !== 'carrie') {
+      const joinUsername = String(parseSettings(event).joinUsername || '').trim().toLowerCase()
+      if (!event || !joinUsername || username !== joinUsername) {
         return json(request, { ok: false, error: 'That username does not match this invitation.' }, 401)
       }
 
@@ -943,8 +945,9 @@ export default {
       const username = String(body.username || '').trim().toLowerCase()
       const password = String(body.password || '')
       const event = await getEvent()
+      const joinUsername = String(parseSettings(event).joinUsername || '').trim().toLowerCase()
 
-      if (!event || !isCazEvent(event) || username !== 'carrie' || password.length < 10) {
+      if (!event || !joinUsername || username !== joinUsername || password.length < 10) {
         return json(request, { ok: false, error: 'Invalid account setup details.' }, 400)
       }
 
@@ -963,23 +966,23 @@ export default {
         if (existing) {
           const result = await env.DB.prepare(
             `UPDATE admin_users
-             SET email = 'carrie', password_hash = ?, password_salt = ?, password_iterations = ?, status = 'active', activated_at = ?
+             SET email = ?, password_hash = ?, password_salt = ?, password_iterations = ?, status = 'active', activated_at = ?
              WHERE id = ? AND password_hash IS NULL AND status <> 'active'`,
-          ).bind(passwordData.hash, passwordData.salt, passwordData.iterations, now, userId).run()
+          ).bind(joinUsername, passwordData.hash, passwordData.salt, passwordData.iterations, now, userId).run()
           if (!result?.meta?.changes) throw new Error('already-claimed')
         } else {
           await env.DB.prepare(
             `INSERT INTO admin_users (
                id, event_id, email, password_hash, password_salt, password_iterations,
                status, created_at, activated_at
-             ) VALUES (?, ?, 'carrie', ?, ?, ?, 'active', ?, ?)`,
-          ).bind(userId, event.id, passwordData.hash, passwordData.salt, passwordData.iterations, now, now).run()
+             ) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?)`,
+          ).bind(userId, event.id, joinUsername, passwordData.hash, passwordData.salt, passwordData.iterations, now, now).run()
         }
       } catch {
         return json(request, { ok: false, error: 'This account has already been set up. Please log in instead.' }, 409)
       }
 
-      return createAdminSession(request, env, event, { id: userId, email: 'carrie' })
+      return createAdminSession(request, env, event, { id: userId, email: joinUsername })
     }
 
     if (url.pathname === '/api/admin/setup/verify' && request.method === 'POST') {
@@ -1103,6 +1106,13 @@ export default {
         return json(request, { ok: false, error: 'Your admin session has expired' }, 401, {
           'Set-Cookie': clearSessionCookie(env),
         })
+      }
+
+      // Photos, downloads and switching on guest sharing wait for the unlock time.
+      const photoRoutes = ['/api/admin/photos', '/api/admin/image', '/api/admin/download-zip']
+      const enablingShare = url.pathname === '/api/admin/gallery-share' && request.method === 'POST'
+      if ((photoRoutes.includes(url.pathname) || enablingShare) && galleryLocked(await getEvent())) {
+        return galleryLockedResponse(request)
       }
 
       if (url.pathname === '/api/admin/me' && request.method === 'GET') {
