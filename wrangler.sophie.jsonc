@@ -1,6 +1,6 @@
 {
   "name": "sophies-last-rodeo-camera",
-  "main": "worker/index.js",
+  "main": "worker/legacy.js",
   "compatibility_date": "2026-03-20",
 
   "routes": [

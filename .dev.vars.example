@@ -1,0 +1,4 @@
+# Copy to .dev.vars for wrangler dev. Lets localhost pick an event.
+# Switch event in the browser with http://localhost:8787/__dev/event/<slug>
+ALLOW_DEV_EVENT=true
+DEV_EVENT_SLUG=caz-and-dan

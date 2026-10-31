@@ -8,7 +8,14 @@
   "assets": {
     "binding": "ASSETS",
     "directory": "./dist/app",
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "single-page-application",
+    // Pages need the Worker so it can add the event to index.html.
+    // Built files under /assets/ are served straight from storage.
+    "run_worker_first": ["/*", "!/assets/*"]
+  },
+  "vars": {
+    "APP_DOMAIN": "onlinedisposablecamera.co.uk",
+    "ADMIN_COOKIE_NAME": "odc_admin"
   },
   "d1_databases": [
     {

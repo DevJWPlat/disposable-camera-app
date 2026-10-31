@@ -1,6 +1,30 @@
+// The single app that serves every event. The event is chosen from the
+// request's hostname (see resolveEvent). The old per-event deployments run
+// worker/legacy.js until cutover.
+
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
+
+function isLocalHost(hostname) {
+  return LOCAL_HOSTS.has(hostname) || /^192\.168\.\d+\.\d+$/.test(hostname) || /^10\.\d+\.\d+\.\d+$/.test(hostname)
+}
+
+function allowedOrigin(request) {
+  const origin = request.headers.get('Origin')
+  if (!origin) return null
+  try {
+    const originHost = new URL(origin).hostname
+    const requestHost = new URL(request.url).hostname
+    if (originHost === requestHost) return origin
+    // Local development: the Vite dev server calls wrangler dev on another port.
+    if (isLocalHost(originHost) && isLocalHost(requestHost)) return origin
+  } catch {
+    return null
+  }
+  return null
+}
 
 function corsHeaders(request) {
-  const origin = request.headers.get('Origin')
+  const origin = allowedOrigin(request)
   return {
     ...(origin ? { 'Access-Control-Allow-Origin': origin } : {}),
     'Access-Control-Allow-Credentials': 'true',
@@ -42,7 +66,7 @@ function parseCookies(request) {
 }
 
 function cookieName(env) {
-  return env.ADMIN_COOKIE_NAME || 'camera_admin_session'
+  return env.ADMIN_COOKIE_NAME || 'odc_admin'
 }
 
 function sessionCookie(env, token, maxAge = 60 * 60 * 24 * 7) {
@@ -125,18 +149,106 @@ async function hashPassword(password, saltHex = null, iterations = 100000) {
   }
 }
 
-async function getEvent(env) {
-  const slug = env.EVENT_SLUG
+const EVENT_COLUMNS = `
+  e.id, e.slug, e.title, e.event_date, e.max_shots, e.is_active,
+  e.theme, e.settings_json, e.gallery_unlock_at, e.storage_until`
+
+function normaliseHost(value) {
+  return String(value || '').trim().toLowerCase().replace(/\.$/, '').replace(/:\d+$/, '')
+}
+
+function slugFromAppHost(hostname, appDomain) {
+  const suffix = `.${appDomain}`
+  if (!appDomain || !hostname.endsWith(suffix)) return null
+  const label = hostname.slice(0, -suffix.length)
+  // One level only: caz-and-dan.onlinedisposablecamera.co.uk, not a.b.onlinedisposablecamera.co.uk
+  return /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label) ? label : null
+}
+
+// Finds the event for this request:
+// 1. an exact hostname in event_domains (custom domains, older addresses)
+// 2. <slug>.<APP_DOMAIN>
+// 3. local development only: DEV_EVENT_SLUG, or the odc_dev_event cookie
+async function resolveEvent(request, env) {
+  const hostname = normaliseHost(new URL(request.url).hostname)
+
+  const byDomain = await env.DB.prepare(
+    `SELECT ${EVENT_COLUMNS}
+     FROM event_domains d
+     JOIN events e ON e.id = d.event_id
+     WHERE d.hostname = ? AND e.is_active = 1
+     LIMIT 1`,
+  ).bind(hostname).first()
+  if (byDomain) return byDomain
+
+  let slug = slugFromAppHost(hostname, normaliseHost(env.APP_DOMAIN))
+
+  if (!slug && isLocalHost(hostname) && env.ALLOW_DEV_EVENT === 'true') {
+    slug = parseCookies(request).odc_dev_event || env.DEV_EVENT_SLUG || null
+  }
+
   if (!slug) return null
+
   return env.DB.prepare(
-    `SELECT id, slug, couple_names, wedding_date, max_shots, is_active
-     FROM events
-     WHERE slug = ? AND is_active = 1
+    `SELECT ${EVENT_COLUMNS}
+     FROM events e
+     WHERE e.slug = ? AND e.is_active = 1
      LIMIT 1`,
   ).bind(slug).first()
 }
 
-async function requireAdmin(request, env) {
+function parseSettings(event) {
+  try {
+    const value = JSON.parse(event?.settings_json || '{}')
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {}
+  } catch {
+    return {}
+  }
+}
+
+// The only event details the browser sees. Never add admin or storage data here.
+function publicEvent(event) {
+  if (!event) return null
+  return {
+    slug: event.slug,
+    title: event.title,
+    eventDate: event.event_date,
+    maxShots: Number(event.max_shots || 25),
+    theme: event.theme,
+    galleryUnlockAt: event.gallery_unlock_at || null,
+    settings: parseSettings(event),
+  }
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
+}
+
+// Puts the event into the page so the app knows which event it is before it
+// starts, and so shared links get the event's title in their preview.
+async function injectEvent(response, event) {
+  const html = await response.text()
+  const data = JSON.stringify(publicEvent(event)).replace(/</g, '\\u003c')
+  const script = `<script>window.__ODC_EVENT__=${data}</script>`
+  let out = html.includes('</head>') ? html.replace('</head>', `${script}</head>`) : script + html
+
+  if (event?.title) {
+    const title = escapeHtml(event.title)
+    out = out.replace(/<title>[\s\S]*?<\/title>/i, `<title>${title}</title>`)
+    out = out.replace(
+      /(<meta\s+name="description"\s+content=")[^"]*(")/i,
+      `$1${escapeHtml(`${event.title} disposable camera`)}$2`,
+    )
+  }
+
+  const headers = new Headers(response.headers)
+  headers.delete('content-length')
+  headers.delete('etag')
+  headers.set('Cache-Control', 'no-store')
+  return new Response(out, { status: event ? response.status : 404, headers })
+}
+
+async function requireAdmin(request, env, event) {
   const token = parseCookies(request)[cookieName(env)]
   if (!token) return null
 
@@ -162,7 +274,6 @@ async function requireAdmin(request, env) {
 
   if (!session) return null
 
-  const event = await getEvent(env)
   if (!event || Number(event.id) !== Number(session.event_id)) return null
 
   await env.DB.prepare(
@@ -373,17 +484,36 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url)
 
+    let eventPromise = null
+    const getEvent = () => (eventPromise ||= resolveEvent(request, env))
+
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: corsHeaders(request) })
     }
 
     if (url.pathname === '/api/health' && request.method === 'GET') {
-      const event = await getEvent(env)
+      const event = await getEvent()
       return json(request, {
         ok: true,
         event: event?.slug || null,
+        host: normaliseHost(url.hostname),
         hasDb: !!env.DB,
         hasPhotosBucket: !!env.PHOTOS,
+      })
+    }
+
+    if (url.pathname === '/api/event' && request.method === 'GET') {
+      const event = await getEvent()
+      if (!event) return json(request, { ok: false, error: 'Event not found' }, 404)
+      return json(request, { ok: true, event: publicEvent(event) }, 200, { 'Cache-Control': 'no-store' })
+    }
+
+    // Local development only: /__dev/event/<slug> picks which event localhost shows.
+    if (url.pathname.startsWith('/__dev/event/') && isLocalHost(url.hostname) && env.ALLOW_DEV_EVENT === 'true') {
+      const slug = url.pathname.slice('/__dev/event/'.length).replace(/[^a-z0-9-]/gi, '')
+      return new Response(null, {
+        status: 302,
+        headers: { Location: '/', 'Set-Cookie': `odc_dev_event=${slug}; Path=/; SameSite=Lax; Max-Age=86400` },
       })
     }
 
@@ -396,7 +526,7 @@ export default {
           return json(request, { ok: false, error: 'Invalid device token' }, 400)
         }
 
-        const event = await getEvent(env)
+        const event = await getEvent()
         if (!event) {
           return json(request, { ok: false, error: 'Event is not available' }, 404)
         }
@@ -443,7 +573,7 @@ export default {
           return json(request, { ok: false, error: 'Invalid upload' }, 400)
         }
 
-        const event = await getEvent(env)
+        const event = await getEvent()
         if (!event) return json(request, { ok: false, error: 'Event is not available' }, 404)
 
         const session = await env.DB.prepare(
@@ -458,8 +588,9 @@ export default {
 
         const photoId = crypto.randomUUID()
         const now = new Date().toISOString()
-        const extension = file.name.includes('.') ? file.name.split('.').pop() : 'jpg'
-        const r2Key = `event-${event.id}/session-${session.id}/${photoId}.${extension || 'jpg'}`
+        const rawExtension = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : ''
+        const extension = /^[a-z0-9]{1,5}$/.test(rawExtension) ? rawExtension : 'jpg'
+        const r2Key = `events/${event.id}/photos/session-${session.id}/${photoId}.${extension}`
 
         await env.PHOTOS.put(r2Key, file.stream(), {
           httpMetadata: { contentType: file.type || 'image/jpeg' },
@@ -467,7 +598,7 @@ export default {
 
         let thumbnailR2Key = null
         if (thumbnailFile instanceof File && thumbnailFile.size > 0) {
-          thumbnailR2Key = `thumb/event-${event.id}/session-${session.id}/${photoId}.jpg`
+          thumbnailR2Key = `events/${event.id}/thumbs/session-${session.id}/${photoId}.jpg`
           await env.PHOTOS.put(thumbnailR2Key, thumbnailFile.stream(), {
             httpMetadata: { contentType: 'image/jpeg' },
           })
@@ -513,7 +644,7 @@ export default {
           return json(request, { ok: false, error: 'Missing session details' }, 400)
         }
 
-        const event = await getEvent(env)
+        const event = await getEvent()
         if (!event) return json(request, { ok: false, error: 'Event is not available' }, 404)
 
         const session = await env.DB.prepare(
@@ -550,7 +681,7 @@ export default {
           return json(request, { ok: false, error: 'Missing session details' }, 400)
         }
 
-        const event = await getEvent(env)
+        const event = await getEvent()
         if (!event) return json(request, { ok: false, error: 'Event is not available' }, 404)
 
         const session = await env.DB.prepare(
@@ -626,7 +757,7 @@ export default {
 
         if (!sessionId || !deviceToken) return textResponse(request, 'Image not found', 404)
 
-        const event = await getEvent(env)
+        const event = await getEvent()
         if (!event) return textResponse(request, 'Image not found', 404)
 
         const photo = await env.DB.prepare(
@@ -658,7 +789,7 @@ export default {
       const token = String(body.token || '').trim()
       const rawIds = Array.isArray(body.ids) ? body.ids : []
       const ids = [...new Set(rawIds.map((id) => String(id || '').trim()).filter(Boolean))]
-      const event = await getEvent(env)
+      const event = await getEvent()
 
       if (!event || !isCazEvent(event) || !token) {
         return json(request, { ok: false, error: 'This gallery link is not available.' }, 404)
@@ -696,7 +827,7 @@ export default {
 
       const headers = new Headers(corsHeaders(request))
       headers.set('Content-Type', 'application/zip')
-      headers.set('Content-Disposition', 'attachment; filename="caz-and-dan-photos.zip"')
+      headers.set('Content-Disposition', `attachment; filename="${event.slug}-photos.zip"`)
       headers.set('Cache-Control', 'no-store')
       headers.set('X-Content-Type-Options', 'nosniff')
 
@@ -707,7 +838,7 @@ export default {
       const token = String(url.searchParams.get('token') || '').trim()
       const photoId = String(url.searchParams.get('id') || '').trim()
       const variant = url.searchParams.get('variant') === 'thumbnail' ? 'thumbnail' : 'original'
-      const event = await getEvent(env)
+      const event = await getEvent()
 
       if (!event || !isCazEvent(event) || !token || !photoId) {
         return textResponse(request, 'Image not found', 404)
@@ -737,7 +868,7 @@ export default {
 
     if (url.pathname.startsWith('/api/gallery/share/') && request.method === 'GET') {
       const token = decodeURIComponent(url.pathname.slice('/api/gallery/share/'.length)).trim()
-      const event = await getEvent(env)
+      const event = await getEvent()
       if (!event || !isCazEvent(event) || !token) {
         return json(request, { ok: false, error: 'This gallery link is not available yet.' }, 404)
       }
@@ -768,7 +899,7 @@ export default {
     if (url.pathname === '/api/admin/join/check' && request.method === 'POST') {
       const body = await readJson(request)
       const username = String(body.username || '').trim().toLowerCase()
-      const event = await getEvent(env)
+      const event = await getEvent()
       if (!event || !isCazEvent(event) || username !== 'carrie') {
         return json(request, { ok: false, error: 'That username does not match this invitation.' }, 401)
       }
@@ -788,7 +919,7 @@ export default {
       const body = await readJson(request)
       const username = String(body.username || '').trim().toLowerCase()
       const password = String(body.password || '')
-      const event = await getEvent(env)
+      const event = await getEvent()
 
       if (!event || !isCazEvent(event) || username !== 'carrie' || password.length < 10) {
         return json(request, { ok: false, error: 'Invalid account setup details.' }, 400)
@@ -832,7 +963,7 @@ export default {
       const body = await readJson(request)
       const email = String(body.email || '').trim().toLowerCase()
       const token = String(body.token || '')
-      const event = await getEvent(env)
+      const event = await getEvent()
       if (!event || !email || !token) return json(request, { ok: false, error: 'Invalid setup request' }, 400)
 
       const tokenHash = await sha256(token)
@@ -852,7 +983,7 @@ export default {
       const email = String(body.email || '').trim().toLowerCase()
       const token = String(body.token || '')
       const password = String(body.password || '')
-      const event = await getEvent(env)
+      const event = await getEvent()
 
       if (!event || !email || !token || password.length < 10) {
         return json(request, { ok: false, error: 'Invalid account setup details' }, 400)
@@ -906,7 +1037,7 @@ export default {
       const body = await readJson(request)
       const email = String(body.email || '').trim().toLowerCase()
       const password = String(body.password || '')
-      const event = await getEvent(env)
+      const event = await getEvent()
 
       if (!event || !email || !password) {
         return json(request, { ok: false, error: 'Invalid login details' }, 401)
@@ -944,7 +1075,7 @@ export default {
     }
 
     if (url.pathname.startsWith('/api/admin/')) {
-      const admin = await requireAdmin(request, env)
+      const admin = await requireAdmin(request, env, await getEvent())
       if (!admin) {
         return json(request, { ok: false, error: 'Your admin session has expired' }, 401, {
           'Set-Cookie': clearSessionCookie(env),
@@ -967,7 +1098,7 @@ export default {
       }
 
       if (url.pathname === '/api/admin/gallery-share' && request.method === 'POST') {
-        const event = await getEvent(env)
+        const event = await getEvent()
         if (!event || !isCazEvent(event)) return json(request, { ok: false, error: 'Guest sharing is not available for this event.' }, 404)
 
         const body = await readJson(request)
@@ -998,7 +1129,7 @@ export default {
       }
 
       if (url.pathname === '/api/admin/stats' && request.method === 'GET') {
-        const event = await getEvent(env)
+        const event = await getEvent()
         const photoResult = await env.DB.prepare(
           `SELECT COUNT(*) AS count, MAX(uploaded_at) AS latest FROM photos WHERE event_id = ?`,
         ).bind(event.id).first()
@@ -1062,10 +1193,8 @@ export default {
           return json(request, { ok: false, error: 'The selected photos could not be found' }, 404)
         }
 
-        // `event` was never defined in this block, so this handler threw a
-        // ReferenceError and every organiser ZIP download failed.
-        const event = await getEvent(env)
-        const zipSlug = String(event?.slug || env.EVENT_SLUG || 'event').replace(/[^a-z0-9-]/gi, '') || 'event'
+        const event = await getEvent()
+        const zipSlug = String(event?.slug || 'event').replace(/[^a-z0-9-]/gi, '') || 'event'
 
         const headers = new Headers(corsHeaders(request))
         headers.set('Content-Type', 'application/zip')
@@ -1106,7 +1235,12 @@ export default {
       return json(request, { ok: false, error: 'Admin route not found' }, 404)
     }
 
-    return env.ASSETS.fetch(request)
+    const assetResponse = await env.ASSETS.fetch(request)
+    const contentType = assetResponse.headers.get('Content-Type') || ''
+    if (request.method === 'GET' && contentType.includes('text/html')) {
+      return injectEvent(assetResponse, await getEvent())
+    }
+    return assetResponse
   },
 }
 
