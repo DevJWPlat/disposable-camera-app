@@ -253,7 +253,7 @@ onMounted(checkExistingPreview)
 .finish-copy {
   position: absolute;
   z-index: 8;
-  top: 10%;
+  top: 5%;
   right: 7%;
   left: 7%;
   text-align: center;
@@ -264,7 +264,7 @@ onMounted(checkExistingPreview)
   width: 100%;
   max-width: 360px;
   height: auto;
-  margin: 0 auto .45rem;
+  margin: 0 auto .75rem;
   filter: drop-shadow(0 5px 5px rgba(72, 40, 31, .08));
 }
 
@@ -278,7 +278,7 @@ onMounted(checkExistingPreview)
 
 .finish-body {
   max-width: 21rem;
-  margin: .35rem auto 0;
+  margin: .65rem auto 0;
   color: #654740;
   font-size: clamp(.56rem, 2.3vw, .68rem);
   line-height: 1.45;
@@ -287,10 +287,18 @@ onMounted(checkExistingPreview)
 .preview-area {
   position: absolute;
   z-index: 9;
-  top: 55%;
   right: 7%;
   left: 7%;
   text-align: center;
+}
+
+.preview-area:not(.preview-area--revealed) {
+  top: auto;
+  bottom: 27%;
+}
+
+.preview-area--revealed {
+  top: 48%;
 }
 
 .preview-question,
@@ -313,7 +321,7 @@ onMounted(checkExistingPreview)
 .preview-copy,
 .preview-tease {
   max-width: 19rem;
-  margin: .36rem auto 0;
+  margin: .55rem auto 0;
   color: #74554d;
   font-size: clamp(.5rem, 2.15vw, .63rem);
   line-height: 1.45;
@@ -324,7 +332,7 @@ onMounted(checkExistingPreview)
   display: flex;
   width: min(100%, 18rem);
   min-height: 3.3rem;
-  margin: .72rem auto 0;
+  margin: 1rem auto 0;
   padding: .7rem 1.05rem;
   align-items: center;
   justify-content: center;
@@ -363,9 +371,9 @@ onMounted(checkExistingPreview)
 
 .preview-polaroid {
   position: relative;
-  width: min(74%, 20.5rem);
+  width: min(64%, 18rem);
   aspect-ratio: 1 / 1;
-  margin: .3rem auto 0;
+  margin: .7rem auto 0;
   transform: rotate(-2deg);
 }
 
@@ -409,7 +417,7 @@ onMounted(checkExistingPreview)
 }
 
 .preview-tease {
-  margin-top: 8px;
+  margin-top: 14px;
   color: #573d38;
   font-family: Georgia, 'Times New Roman', serif;
   font-style: italic;
@@ -496,6 +504,103 @@ onMounted(checkExistingPreview)
   .preview-area { top: 51%; }
   .preview-area--revealed { top: 45%; }
   .preview-polaroid { width: min(61%, 13.5rem); }
+}
+
+
+@media (max-width: 520px) {
+  .finish-copy {
+    top: 4%;
+    right: 6%;
+    left: 6%;
+  }
+
+  .finish-logo {
+    width: 92%;
+    max-width: 330px;
+    margin-bottom: .85rem;
+  }
+
+  .finish-lead {
+    line-height: 1.22;
+  }
+
+  .finish-body {
+    width: 92%;
+    margin-top: .75rem;
+    line-height: 1.55;
+  }
+
+  .preview-area:not(.preview-area--revealed) {
+    right: 8%;
+    bottom: 26%;
+    left: 8%;
+  }
+
+  .preview-question {
+    line-height: 1.18;
+  }
+
+  .preview-copy {
+    width: 92%;
+    margin-top: .65rem;
+    line-height: 1.55;
+  }
+
+  .preview-button {
+    margin-top: 1.15rem;
+  }
+
+  .preview-area--revealed {
+    top: 50%;
+    right: 6%;
+    left: 6%;
+  }
+
+  .preview-label {
+    margin-bottom: .35rem;
+  }
+
+  .preview-polaroid {
+    width: min(62%, 16.5rem);
+    margin-top: .55rem;
+  }
+
+  .preview-tease {
+    width: 92%;
+    margin-top: .8rem;
+    line-height: 1.45;
+  }
+}
+
+@media (max-width: 390px), (max-height: 760px) {
+  .finish-copy {
+    top: 3.25%;
+  }
+
+  .finish-logo {
+    width: 86%;
+    margin-bottom: .6rem;
+  }
+
+  .finish-body {
+    margin-top: .55rem;
+  }
+
+  .preview-area:not(.preview-area--revealed) {
+    bottom: 25%;
+  }
+
+  .preview-button {
+    margin-top: .9rem;
+  }
+
+  .preview-area--revealed {
+    top: 49%;
+  }
+
+  .preview-polaroid {
+    width: min(58%, 15rem);
+  }
 }
 
 @media (min-width: 521px) {

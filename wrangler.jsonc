@@ -12,12 +12,21 @@
 			"binding": "sophies_last_rodeo_db",
 			"database_name": "sophies-last-rodeo-db",
 			"database_id": "6ab44800-6547-410e-896b-8226b7cbb1fc"
+		},
+		{
+			"binding": "caz_and_dan_db",
+			"database_name": "caz-and-dan-db",
+			"database_id": "12bc0575-7eab-4485-81b1-972b880d4f91"
 		}
 	],
 	"r2_buckets": [
 		{
 			"bucket_name": "sophies-last-rodeo-photos",
 			"binding": "sophies_last_rodeo_photos"
+		},
+		{
+			"bucket_name": "caz-and-dan-photos",
+			"binding": "caz_and_dan_photos"
 		}
 	]
 }

@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process'
 const args = process.argv.slice(2)
 
 const eventKey = args[0]
-const rawEmail = args[1]
+const rawIdentifier = args[1]
 const modeArg = args.find((arg) => arg === '--local' || arg === '--remote')
 const mode = modeArg || '--remote'
 
@@ -19,14 +19,14 @@ const deployments = {
   },
 }
 
-if (!eventKey || !rawEmail || !deployments[eventKey]) {
+if (!eventKey || !rawIdentifier || !deployments[eventKey]) {
   console.error(
-    'Usage: npm run admin:invite -- <sophies-last-rodeo|caz-and-dan> <email> [--local|--remote]',
+    'Usage: npm run admin:invite -- <sophies-last-rodeo|caz-and-dan> <email-or-username> [--local|--remote]',
   )
   process.exit(1)
 }
 
-const email = rawEmail.trim().toLowerCase()
+const email = rawIdentifier.trim().toLowerCase()
 const deployment = deployments[eventKey]
 
 const token = randomBytes(32).toString('base64url')
@@ -116,5 +116,5 @@ if (mode === '--local') {
   )
 }
 
-console.log(`Email: ${email}`)
+console.log(`${eventKey === 'caz-and-dan' ? 'Username' : 'Email'}: ${email}`)
 console.log(`Expires: ${expires.toISOString()}`)

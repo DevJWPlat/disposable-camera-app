@@ -41,3 +41,4 @@ __screenshots__/
 .wrangler/
 .DS_Store
 -d
+.patch-backups/

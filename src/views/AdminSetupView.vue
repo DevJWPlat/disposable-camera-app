@@ -236,7 +236,7 @@ async function activate() {
   min-height: 1160px;
   margin: 0 auto;
   overflow: hidden;
-  background: linear-gradient(180deg, #fff8f2 0%, #f8ece5 43%, #f6d7d8 72%, #e99aaa 100%);
+  background: linear-gradient(180deg,rgba(255, 245, 242, 1) 0%, rgba(253, 198, 182, 1) 40%);
   color: #2a1e1c;
 }
 
@@ -297,7 +297,7 @@ async function activate() {
 .setup-action:disabled { cursor:wait; opacity:.68; }
 .setup-error { position:relative; z-index:12; width:78%; margin:10px auto 0; color:#9f3148; font-size:12px; font-weight:800; line-height:1.4; text-align:center; }
 
-.desert-stage { position:absolute; z-index:5; right:0; bottom:0; left:0; height:25%; overflow:hidden; }
+.desert-stage { position:absolute; z-index:5; right:0; bottom:0; left:0; height:25%; }
 .desert-art { position:absolute; inset:auto 0 0; width:100%; height:130%; object-fit:cover; object-position:center 70%; transform:scale(1.35); transform-origin:center bottom; }
 .desert-shadow { position:absolute; inset:auto 0 0; height:44%; background:linear-gradient(180deg,transparent,rgba(23,17,15,.96) 55%); }
 .bottom-note { position:absolute; z-index:9; bottom:8%; width:19%; margin:0; white-space:pre-line; color:#ef829b; font-family:'Bradley Hand','Segoe Print','Comic Sans MS',cursive; font-size:9px; font-weight:800; line-height:.94; text-transform:uppercase; }

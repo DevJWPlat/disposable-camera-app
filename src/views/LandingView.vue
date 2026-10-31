@@ -423,5 +423,28 @@ function openAdmin() {
     max-width: none;
     max-height: none;
   }
+
+  .ticket-stage {
+    top: 71.5%;
+  }
+
+  .start-button {
+    top: 80.8%;
+  }
+}
+
+@media (max-width: 390px), (max-height: 780px) {
+  .ticket-stage {
+    top: 72%;
+  }
+
+  .shots-ticket {
+    width: 56%;
+  }
+
+  .start-button {
+    top: 81%;
+    width: 76%;
+  }
 }
 </style>

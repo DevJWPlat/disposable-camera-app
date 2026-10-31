@@ -32,6 +32,8 @@ const error = ref('')
 const session = ref(null)
 const captureFlash = ref(false)
 const flashEnabled = ref(false)
+const hardwareTorchAvailable = ref(false)
+const halfwayPopupVisible = ref(false)
 
 const cameraStarting = ref(false)
 const cameraReady = ref(false)
@@ -45,6 +47,7 @@ const isDev = import.meta.env.DEV
 const STORAGE_KEYS = {
   deviceToken: `disposable_camera_${eventConfig.slug}_device_token`,
   sessionId: `disposable_camera_${eventConfig.slug}_session_id`,
+  halfwaySeen: `disposable_camera_${eventConfig.slug}_halfway_seen`,
 }
 
 const isFrontCamera = computed(() => {
@@ -268,6 +271,80 @@ async function startSession() {
   }
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms))
+}
+
+function getActiveVideoTrack() {
+  return cameraStream?.getVideoTracks?.()[0] || null
+}
+
+function refreshTorchCapability() {
+  hardwareTorchAvailable.value = false
+
+  if (isFrontCamera.value) return
+
+  const track = getActiveVideoTrack()
+  if (!track) return
+
+  try {
+    const capabilities = track.getCapabilities?.()
+    hardwareTorchAvailable.value = capabilities?.torch === true
+  } catch {
+    hardwareTorchAvailable.value = false
+  }
+}
+
+async function setHardwareTorch(enabled) {
+  if (isFrontCamera.value) return false
+
+  const track = getActiveVideoTrack()
+  if (!track || track.readyState !== 'live') return false
+
+  try {
+    const capabilities = track.getCapabilities?.()
+
+    if (capabilities && capabilities.torch !== true) {
+      hardwareTorchAvailable.value = false
+      return false
+    }
+
+    await track.applyConstraints({
+      advanced: [{ torch: enabled }],
+    })
+
+    hardwareTorchAvailable.value = true
+    return true
+  } catch (err) {
+    if (enabled) {
+      console.info('Hardware torch unavailable, using screen flash fallback.', err)
+    }
+    hardwareTorchAvailable.value = false
+    return false
+  }
+}
+
+function showScreenFlash(duration = 760) {
+  captureFlash.value = true
+
+  window.setTimeout(() => {
+    captureFlash.value = false
+  }, duration)
+}
+
+function maybeShowHalfwayPopup(previousRemaining, nextRemaining) {
+  if (previousRemaining <= 25 || nextRemaining !== 25) return
+
+  const sessionId = session.value?.id
+  if (!sessionId) return
+
+  const seenForSession = localStorage.getItem(STORAGE_KEYS.halfwaySeen)
+  if (seenForSession === sessionId) return
+
+  localStorage.setItem(STORAGE_KEYS.halfwaySeen, sessionId)
+  halfwayPopupVisible.value = true
+}
+
 function stopCamera() {
   if (cameraStream) {
     cameraStream
@@ -277,6 +354,7 @@ function stopCamera() {
 
   cameraStream = null
   cameraReady.value = false
+  hardwareTorchAvailable.value = false
 
   if (videoRef.value) {
     videoRef.value.srcObject = null
@@ -327,6 +405,7 @@ async function startCamera() {
     await videoRef.value.play()
 
     cameraReady.value = true
+    refreshTorchCapability()
   } catch (err) {
     console.error('startCamera failed:', err)
 
@@ -427,11 +506,16 @@ async function uploadFile(file) {
     )
   }
 
+  const previousRemaining = shotsRemaining.value
+
   session.value = data.session
 
-  shotsRemaining.value = Number(
+  const nextRemaining = Number(
     data.session.shots_remaining || 0,
   )
+
+  shotsRemaining.value = nextRemaining
+  maybeShowHalfwayPopup(previousRemaining, nextRemaining)
 
   if ('vibrate' in navigator) {
     navigator.vibrate(50)
@@ -481,15 +565,25 @@ async function takePicture() {
 
   error.value = ''
   uploading.value = true
-  if (flashEnabled.value) {
-    captureFlash.value = true
 
-    window.setTimeout(() => {
-      captureFlash.value = false
-    }, 220)
-  }
+  let hardwareTorchUsed = false
 
   try {
+    if (flashEnabled.value) {
+      hardwareTorchUsed = await setHardwareTorch(true)
+
+      if (hardwareTorchUsed) {
+        // Keep the physical light on long enough for auto exposure to react
+        // before the frame is captured.
+        await sleep(520)
+      } else {
+        // Front camera and browsers without torch support get a longer screen
+        // flash so the display has time to illuminate the subject.
+        showScreenFlash(760)
+        await sleep(320)
+      }
+    }
+
     canvas.width = video.videoWidth
     canvas.height = video.videoHeight
 
@@ -517,6 +611,14 @@ async function takePicture() {
       )
     }
 
+    if (hardwareTorchUsed) {
+      // Leave the LED on very briefly after capture so the illuminated frame
+      // is not lost while the camera finishes exposure processing.
+      await sleep(120)
+      await setHardwareTorch(false)
+      hardwareTorchUsed = false
+    }
+
     const photoBlob =
       await canvasToBlob(canvas)
 
@@ -536,6 +638,10 @@ async function takePicture() {
 
     console.error('takePicture failed:', err)
   } finally {
+    if (hardwareTorchUsed) {
+      await setHardwareTorch(false)
+    }
+
     uploading.value = false
   }
 }
@@ -572,6 +678,26 @@ onBeforeUnmount(() => {
         <p>{{ cameraCopy.developingTitle || 'Developing photograph' }}</p>
         <span>{{ cameraCopy.developingCopy || 'Your shot is being safely stored' }}</span>
       </div>
+    </div>
+
+    <div
+      v-if="halfwayPopupVisible"
+      class="halfway-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="halfway-title"
+    >
+      <section class="halfway-card">
+        <span class="halfway-card__eyebrow">25 SHOTS LEFT ✦</span>
+        <h2 id="halfway-title">Halfway there, cowgirl.</h2>
+        <p>
+          Use your final 25 shots and, once your roll is finished,
+          we’ll let you peek at one random photo from the gallery before the big reveal.
+        </p>
+        <button type="button" @click="halfwayPopupVisible = false">
+          Keep shooting
+        </button>
+      </section>
     </div>
 
     <section class="camera-shell">
@@ -1232,12 +1358,101 @@ h1 span {
   display: none;
 }
 
+.halfway-overlay {
+  position: fixed;
+  z-index: 180;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(35, 20, 17, .66);
+  backdrop-filter: blur(10px);
+}
+
+.halfway-card {
+  position: relative;
+  width: min(100%, 22rem);
+  overflow: hidden;
+  border: 2px solid #39221c;
+  border-radius: 1.25rem;
+  background:
+    radial-gradient(circle at 50% -15%, rgba(255,255,255,.9), transparent 13rem),
+    linear-gradient(180deg, #fff5f2 0%, #fdc6b6 100%);
+  padding: 1.6rem 1.35rem 1.35rem;
+  color: #2a1e1c;
+  text-align: center;
+  box-shadow:
+    0 0 0 4px #d5a55e,
+    0 1.5rem 4rem rgba(0,0,0,.34);
+}
+
+.halfway-card::before,
+.halfway-card::after {
+  position: absolute;
+  top: .7rem;
+  color: #d94f73;
+  content: '✦';
+  font-size: 1.1rem;
+}
+
+.halfway-card::before {
+  left: .8rem;
+}
+
+.halfway-card::after {
+  right: .8rem;
+}
+
+.halfway-card__eyebrow {
+  display: block;
+  margin-bottom: .5rem;
+  color: #d94f73;
+  font-size: .7rem;
+  font-weight: 900;
+  letter-spacing: .12em;
+}
+
+.halfway-card h2 {
+  margin: 0;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: clamp(1.7rem, 8vw, 2.25rem);
+  line-height: .98;
+}
+
+.halfway-card p {
+  margin: .85rem auto 1.2rem;
+  color: #684c43;
+  font-size: .78rem;
+  line-height: 1.55;
+}
+
+.halfway-card button {
+  width: 100%;
+  min-height: 3.1rem;
+  border: 2px solid #281713;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ea557a 0%, #d93661 100%);
+  color: #fff6e8;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 900;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow:
+    0 0 0 2px #d8aa63,
+    inset 0 0 0 2px rgba(255, 226, 178, .42);
+}
+
+.halfway-card button:active {
+  transform: translateY(1px);
+}
+
 .capture-flash {
   position: fixed;
   z-index: 200;
   inset: 0;
-  background: white;
-  animation: flash 220ms ease-out forwards;
+  background: #fff;
+  animation: flash 760ms linear forwards;
   pointer-events: none;
 }
 
@@ -1284,7 +1499,8 @@ h1 span {
 }
 
 @keyframes flash {
-  0% {
+  0%,
+  72% {
     opacity: 1;
   }
 

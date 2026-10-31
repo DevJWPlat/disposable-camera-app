@@ -729,14 +729,32 @@ article:not(.selecting):hover .image-button img {
 
   .selection-controls {
     grid-template-columns: 1fr 1fr;
+    gap: 10px;
   }
 
   .selection-controls strong {
     grid-column: 1 / -1;
   }
 
+  .select-all-button,
+  .clear-button {
+    width: 100%;
+  }
+
+  .select-all-button {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .clear-button {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
   .download-selected-button {
     grid-column: 1 / -1;
+    grid-row: 3;
+    width: 100%;
   }
 }
 </style>

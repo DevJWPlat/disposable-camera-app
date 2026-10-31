@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS export_jobs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_event_device ON sessions(event_id, device_token);
-CREATE INDEX IF NOT EXISTS idx_sessions_preview_photo ON sessions(preview_photo_id);
+
 CREATE INDEX IF NOT EXISTS idx_photos_event_uploaded ON photos(event_id, uploaded_at);
 CREATE INDEX IF NOT EXISTS idx_admin_users_event_email ON admin_users(event_id, email);
 CREATE INDEX IF NOT EXISTS idx_admin_sessions_token ON admin_sessions(token_hash);

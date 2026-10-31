@@ -11,7 +11,6 @@ import horseshoe from '@/assets/events/sophies-last-rodeo/horseshoe.png'
 import rope from '@/assets/events/sophies-last-rodeo/rope.png'
 import sparkles from '@/assets/events/sophies-last-rodeo/sparkles.png'
 import desertFooter from '@/assets/events/sophies-last-rodeo/desert-footer.png'
-import loginButton from '@/assets/events/sophies-last-rodeo/login-button.png'
 import mailIcon from '@/assets/events/sophies-last-rodeo/mail.png'
 import lockIcon from '@/assets/events/sophies-last-rodeo/lock.png'
 import eyeOpenIcon from '@/assets/events/sophies-last-rodeo/eye-open.png'
@@ -44,15 +43,26 @@ const stats = ref(null)
 const photos = ref([])
 const stage = ref('unlock')
 const animatedShotsTaken = ref(0)
+const noticeBoardLoaded = ref(false)
 let shotsAnimationFrame = 0
 
 function openNoticeBoard() {
   stage.value = 'notice'
   animatedShotsTaken.value = 0
+  noticeBoardLoaded.value = false
 
   if (shotsAnimationFrame) {
     cancelAnimationFrame(shotsAnimationFrame)
+    shotsAnimationFrame = 0
   }
+}
+
+function startShotsAnimation() {
+  if (shotsAnimationFrame) {
+    cancelAnimationFrame(shotsAnimationFrame)
+  }
+
+  animatedShotsTaken.value = 0
 
   const target = Math.max(0, Number(stats.value?.photos ?? photos.value.length ?? 0))
   const duration = 900
@@ -74,9 +84,19 @@ function openNoticeBoard() {
   shotsAnimationFrame = requestAnimationFrame(tick)
 }
 
+function handleNoticeBoardLoaded() {
+  if (noticeBoardLoaded.value) return
+
+  noticeBoardLoaded.value = true
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(startShotsAnimation)
+  })
+}
+
 
 const galleryUnlockAt = new Date('2026-09-21T09:00:00+01:00')
-const testingUnlockEnabled = true
+const testingUnlockEnabled = false
 
 const isGalleryUnlocked = computed(() => {
   return testingUnlockEnabled || Date.now() >= galleryUnlockAt.getTime()
@@ -274,8 +294,9 @@ onBeforeUnmount(() => {
             type="submit"
             :aria-label="loggingIn ? 'Signing in' : 'Login'"
           >
-            <img :src="loginButton" alt="" aria-hidden="true" />
-            <span v-if="loggingIn" class="poster-login-loading">Signing in…</span>
+            <span class="poster-login-button__label">
+              {{ loggingIn ? 'SIGNING IN…' : 'LOGIN' }}
+            </span>
           </button>
         </form>
 
@@ -363,24 +384,6 @@ onBeforeUnmount(() => {
         </section>
 
         <section v-else-if="stage === 'notice'" class="notice-board-shell">
-          <header class="gallery-gate-topbar">
-            <div class="gallery-gate-brand">
-              <small>Sophie’s</small>
-              <strong>Last Rodeo ★</strong>
-            </div>
-
-            <div class="gallery-gate-topbar__actions">
-              <button
-                type="button"
-                :disabled="refreshing"
-                @click="refreshData"
-              >
-                {{ refreshing ? 'Refreshing…' : 'Refresh' }}
-              </button>
-              <button type="button" @click="logout">Log out</button>
-            </div>
-          </header>
-
           <div class="notice-board">
             <picture class="notice-board__picture">
               <source media="(max-width: 499px)" :srcset="noticeBoardMobile" />
@@ -388,10 +391,15 @@ onBeforeUnmount(() => {
                 class="notice-board__screen"
                 :src="noticeBoardDesktop"
                 alt="Sophie’s Last Rodeo notice board with wanted poster and shots taken"
+                @load="handleNoticeBoardLoaded"
               />
             </picture>
 
-            <strong class="notice-board__count" aria-label="Photos taken">
+            <strong
+              v-show="noticeBoardLoaded"
+              class="notice-board__count"
+              aria-label="Photos taken"
+            >
               {{ animatedShotsTaken }}
             </strong>
 
@@ -682,7 +690,7 @@ button:disabled { cursor:not-allowed; opacity:.45; }
 
 .notice-board-shell {
   width: 100%;
-  min-height: 100svh;
+  min-height: 100dvh;
   background: #17110f;
 }
 
@@ -763,18 +771,15 @@ button:disabled { cursor:not-allowed; opacity:.45; }
 }
 
 @media (max-width: 499px) {
-  .notice-board-shell {
-    min-height: 100svh;
-  }
-
+  .notice-board-shell,
   .notice-board {
-    min-height: calc(100svh - 4rem);
+    min-height: 100dvh;
   }
 
   .notice-board__picture,
   .notice-board__screen {
     width: 100%;
-    height: 100vh;
+    height: 100dvh;
   }
 
   .notice-board__count {
@@ -1098,21 +1103,33 @@ button:disabled { cursor:not-allowed; opacity:.45; }
 
 .poster-login-button {
   position: relative;
-  display: block;
-  width: 100%;
-  margin: 8px auto 0;
-  padding: 0;
-  overflow: hidden;
-  border: 0;
+  display: grid;
+  width: min(100% - 42px, 430px);
+  min-height: 54px;
+  margin: 16px auto 0;
+  place-items: center;
+  border: 2px solid #20120e;
   border-radius: 999px;
-  background: transparent;
+  background:
+    linear-gradient(180deg, #e95678 0%, #d94166 100%);
+  color: #fff6e8;
   cursor: pointer;
-  transition: transform .15s ease, filter .15s ease;
+  box-shadow:
+    0 0 0 2px #e2b36b,
+    0 0 0 4px #20120e,
+    inset 0 0 0 2px rgba(255, 225, 179, .55),
+    inset 0 -5px 10px rgba(111, 22, 50, .13);
+  transition: transform .15s ease, filter .15s ease, box-shadow .15s ease;
 }
 
 .poster-login-button:hover:not(:disabled) {
   transform: translateY(-2px);
-  filter: brightness(1.025);
+  filter: brightness(1.035);
+  box-shadow:
+    0 0 0 2px #edc37f,
+    0 0 0 4px #20120e,
+    0 7px 16px rgba(86, 34, 35, .15),
+    inset 0 0 0 2px rgba(255, 225, 179, .6);
 }
 
 .poster-login-button:active:not(:disabled) {
@@ -1121,27 +1138,29 @@ button:disabled { cursor:not-allowed; opacity:.45; }
 
 .poster-login-button:disabled {
   cursor: wait;
-  opacity: .78;
+  opacity: .72;
 }
 
-.poster-login-button img {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-
-.poster-login-loading {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  background: rgba(211,83,114,.82);
-  color: #fff8ef;
+.poster-login-button__label {
   font-family: Georgia, "Times New Roman", serif;
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 900;
-  letter-spacing: .12em;
-  place-items: center;
+  letter-spacing: .3em;
+  line-height: 1;
+  text-indent: .3em;
   text-transform: uppercase;
+  text-shadow: 0 1px 0 rgba(94, 34, 35, .22);
+}
+
+@media (max-width: 520px) {
+  .poster-login-button {
+    width: min(100% - 34px, 390px);
+    min-height: 50px;
+  }
+
+  .poster-login-button__label {
+    font-size: 16px;
+  }
 }
 
 .admin-login-poster .desert-stage {

@@ -53,6 +53,44 @@ function clearSessionCookie(env) {
   return `${cookieName(env)}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`
 }
 
+function isCazEvent(event) {
+  return event?.slug === 'caz-and-dan'
+}
+
+function cazGalleryUnlocked() {
+  return Date.now() >= Date.parse('2026-10-11T08:00:00.000Z')
+}
+
+function createShareToken() {
+  return `${crypto.randomUUID().replaceAll('-', '')}${crypto.randomUUID().replaceAll('-', '')}`
+}
+
+async function createAdminSession(request, env, event, user) {
+  const token = crypto.randomUUID() + crypto.randomUUID()
+  const tokenHash = await sha256(token)
+  const sessionId = crypto.randomUUID()
+  const now = new Date()
+  const expires = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+
+  await env.DB.prepare(
+    `INSERT INTO admin_sessions (
+       id, event_id, admin_user_id, token_hash, expires_at,
+       created_at, last_used_at, revoked_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
+  ).bind(
+    sessionId, event.id, user.id, tokenHash, expires.toISOString(),
+    now.toISOString(), now.toISOString(),
+  ).run()
+
+  await env.DB.prepare(`UPDATE admin_users SET last_login_at = ? WHERE id = ?`)
+    .bind(now.toISOString(), user.id).run()
+
+  return json(request, {
+    ok: true,
+    admin: { id: user.id, email: user.email },
+  }, 200, { 'Set-Cookie': sessionCookie(env, token) })
+}
+
 function bytesToHex(bytes) {
   return [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
 }
@@ -61,7 +99,7 @@ async function sha256(value) {
   return bytesToHex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)))
 }
 
-async function hashPassword(password, saltHex = null, iterations = 120000) {
+async function hashPassword(password, saltHex = null, iterations = 100000) {
   const salt = saltHex
     ? Uint8Array.from(saltHex.match(/.{1,2}/g).map((value) => parseInt(value, 16)))
     : crypto.getRandomValues(new Uint8Array(16))
@@ -615,6 +653,181 @@ export default {
       }
     }
 
+    if (url.pathname === '/api/gallery/share/download-zip' && request.method === 'POST') {
+      const body = await readJson(request)
+      const token = String(body.token || '').trim()
+      const rawIds = Array.isArray(body.ids) ? body.ids : []
+      const ids = [...new Set(rawIds.map((id) => String(id || '').trim()).filter(Boolean))]
+      const event = await getEvent(env)
+
+      if (!event || !isCazEvent(event) || !token) {
+        return json(request, { ok: false, error: 'This gallery link is not available.' }, 404)
+      }
+
+      const share = await env.DB.prepare(
+        `SELECT enabled FROM gallery_shares WHERE event_id = ? AND token = ? LIMIT 1`,
+      ).bind(event.id, token).first()
+
+      if (!share || Number(share.enabled) !== 1) {
+        return json(request, { ok: false, error: 'This gallery link has been switched off.' }, 404)
+      }
+
+      if (!ids.length) {
+        return json(request, { ok: false, error: 'Select at least one photo.' }, 400)
+      }
+
+      if (ids.length > 5000) {
+        return json(request, { ok: false, error: 'Too many photos selected for one download.' }, 400)
+      }
+
+      const results = await env.DB.prepare(
+        `SELECT id, r2_key, uploaded_at
+         FROM photos
+         WHERE event_id = ?
+         ORDER BY uploaded_at DESC`,
+      ).bind(event.id).all()
+
+      const byId = new Map((results.results || []).map((photo) => [String(photo.id), photo]))
+      const selectedPhotos = ids.map((id) => byId.get(id)).filter(Boolean)
+
+      if (!selectedPhotos.length) {
+        return json(request, { ok: false, error: 'The selected photos could not be found.' }, 404)
+      }
+
+      const headers = new Headers(corsHeaders(request))
+      headers.set('Content-Type', 'application/zip')
+      headers.set('Content-Disposition', 'attachment; filename="caz-and-dan-photos.zip"')
+      headers.set('Cache-Control', 'no-store')
+      headers.set('X-Content-Type-Options', 'nosniff')
+
+      return new Response(streamPhotoZip(env, selectedPhotos), { headers })
+    }
+
+    if (url.pathname === '/api/gallery/share/image' && request.method === 'GET') {
+      const token = String(url.searchParams.get('token') || '').trim()
+      const photoId = String(url.searchParams.get('id') || '').trim()
+      const variant = url.searchParams.get('variant') === 'thumbnail' ? 'thumbnail' : 'original'
+      const event = await getEvent(env)
+
+      if (!event || !isCazEvent(event) || !token || !photoId) {
+        return textResponse(request, 'Image not found', 404)
+      }
+
+      const share = await env.DB.prepare(
+        `SELECT enabled FROM gallery_shares WHERE event_id = ? AND token = ? LIMIT 1`,
+      ).bind(event.id, token).first()
+      if (!share || Number(share.enabled) !== 1) return textResponse(request, 'Image not found', 404)
+
+      const photo = await env.DB.prepare(
+        `SELECT r2_key, thumbnail_r2_key FROM photos WHERE id = ? AND event_id = ? LIMIT 1`,
+      ).bind(photoId, event.id).first()
+      if (!photo) return textResponse(request, 'Image not found', 404)
+
+      const key = variant === 'thumbnail' ? photo.thumbnail_r2_key : photo.r2_key
+      if (!key) return textResponse(request, 'Image not found', 404)
+      const object = await env.PHOTOS.get(key)
+      if (!object) return textResponse(request, 'Image not found', 404)
+
+      const headers = new Headers(corsHeaders(request))
+      object.writeHttpMetadata(headers)
+      headers.set('etag', object.httpEtag)
+      headers.set('Cache-Control', 'private, max-age=300')
+      return new Response(object.body, { headers })
+    }
+
+    if (url.pathname.startsWith('/api/gallery/share/') && request.method === 'GET') {
+      const token = decodeURIComponent(url.pathname.slice('/api/gallery/share/'.length)).trim()
+      const event = await getEvent(env)
+      if (!event || !isCazEvent(event) || !token) {
+        return json(request, { ok: false, error: 'This gallery link is not available yet.' }, 404)
+      }
+
+      const share = await env.DB.prepare(
+        `SELECT enabled FROM gallery_shares WHERE event_id = ? AND token = ? LIMIT 1`,
+      ).bind(event.id, token).first()
+      if (!share || Number(share.enabled) !== 1) {
+        return json(request, { ok: false, error: 'This gallery link has been switched off.' }, 404)
+      }
+
+      const results = await env.DB.prepare(
+        `SELECT id, uploaded_at, thumbnail_r2_key FROM photos WHERE event_id = ? ORDER BY uploaded_at DESC`,
+      ).bind(event.id).all()
+
+      const photos = (results.results || []).map((photo) => ({
+        id: photo.id,
+        uploaded_at: photo.uploaded_at,
+        imageUrl: `${url.origin}/api/gallery/share/image?token=${encodeURIComponent(token)}&id=${encodeURIComponent(photo.id)}&variant=original`,
+        thumbnailUrl: photo.thumbnail_r2_key
+          ? `${url.origin}/api/gallery/share/image?token=${encodeURIComponent(token)}&id=${encodeURIComponent(photo.id)}&variant=thumbnail`
+          : null,
+      }))
+
+      return json(request, { ok: true, photos })
+    }
+
+    if (url.pathname === '/api/admin/join/check' && request.method === 'POST') {
+      const body = await readJson(request)
+      const username = String(body.username || '').trim().toLowerCase()
+      const event = await getEvent(env)
+      if (!event || !isCazEvent(event) || username !== 'carrie') {
+        return json(request, { ok: false, error: 'That username does not match this invitation.' }, 401)
+      }
+
+      const existing = await env.DB.prepare(
+        `SELECT id, status, password_hash FROM admin_users WHERE event_id = ? AND LOWER(email) = ? LIMIT 1`,
+      ).bind(event.id, username).first()
+
+      if (existing?.password_hash || existing?.status === 'active') {
+        return json(request, { ok: false, error: 'This account has already been set up. Please log in instead.' }, 409)
+      }
+
+      return json(request, { ok: true })
+    }
+
+    if (url.pathname === '/api/admin/join/activate' && request.method === 'POST') {
+      const body = await readJson(request)
+      const username = String(body.username || '').trim().toLowerCase()
+      const password = String(body.password || '')
+      const event = await getEvent(env)
+
+      if (!event || !isCazEvent(event) || username !== 'carrie' || password.length < 10) {
+        return json(request, { ok: false, error: 'Invalid account setup details.' }, 400)
+      }
+
+      const existing = await env.DB.prepare(
+        `SELECT id, email, status, password_hash FROM admin_users WHERE event_id = ? AND LOWER(email) = ? LIMIT 1`,
+      ).bind(event.id, username).first()
+      if (existing?.password_hash || existing?.status === 'active') {
+        return json(request, { ok: false, error: 'This account has already been set up. Please log in instead.' }, 409)
+      }
+
+      const now = new Date().toISOString()
+      const passwordData = await hashPassword(password)
+      const userId = existing?.id || crypto.randomUUID()
+
+      try {
+        if (existing) {
+          const result = await env.DB.prepare(
+            `UPDATE admin_users
+             SET email = 'carrie', password_hash = ?, password_salt = ?, password_iterations = ?, status = 'active', activated_at = ?
+             WHERE id = ? AND password_hash IS NULL AND status <> 'active'`,
+          ).bind(passwordData.hash, passwordData.salt, passwordData.iterations, now, userId).run()
+          if (!result?.meta?.changes) throw new Error('already-claimed')
+        } else {
+          await env.DB.prepare(
+            `INSERT INTO admin_users (
+               id, event_id, email, password_hash, password_salt, password_iterations,
+               status, created_at, activated_at
+             ) VALUES (?, ?, 'carrie', ?, ?, ?, 'active', ?, ?)`,
+          ).bind(userId, event.id, passwordData.hash, passwordData.salt, passwordData.iterations, now, now).run()
+        }
+      } catch {
+        return json(request, { ok: false, error: 'This account has already been set up. Please log in instead.' }, 409)
+      }
+
+      return createAdminSession(request, env, event, { id: userId, email: 'carrie' })
+    }
+
     if (url.pathname === '/api/admin/setup/verify' && request.method === 'POST') {
       const body = await readJson(request)
       const email = String(body.email || '').trim().toLowerCase()
@@ -710,34 +923,12 @@ export default {
         return json(request, { ok: false, error: 'Invalid login details' }, 401)
       }
 
-      const candidate = await hashPassword(password, user.password_salt, Number(user.password_iterations || 120000))
+      const candidate = await hashPassword(password, user.password_salt, Number(user.password_iterations || 100000))
       if (candidate.hash !== user.password_hash) {
         return json(request, { ok: false, error: 'Invalid login details' }, 401)
       }
 
-      const token = crypto.randomUUID() + crypto.randomUUID()
-      const tokenHash = await sha256(token)
-      const sessionId = crypto.randomUUID()
-      const now = new Date()
-      const expires = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
-
-      await env.DB.prepare(
-        `INSERT INTO admin_sessions (
-           id, event_id, admin_user_id, token_hash, expires_at,
-           created_at, last_used_at, revoked_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
-      ).bind(
-        sessionId, event.id, user.id, tokenHash, expires.toISOString(),
-        now.toISOString(), now.toISOString(),
-      ).run()
-
-      await env.DB.prepare(`UPDATE admin_users SET last_login_at = ? WHERE id = ?`)
-        .bind(now.toISOString(), user.id).run()
-
-      return json(request, {
-        ok: true,
-        admin: { id: user.id, email: user.email },
-      }, 200, { 'Set-Cookie': sessionCookie(env, token) })
+      return createAdminSession(request, env, event, user)
     }
 
     if (url.pathname === '/api/admin/logout' && request.method === 'POST') {
@@ -762,6 +953,48 @@ export default {
 
       if (url.pathname === '/api/admin/me' && request.method === 'GET') {
         return json(request, { ok: true, admin: { id: admin.id, email: admin.email } })
+      }
+
+      if (url.pathname === '/api/admin/gallery-share' && request.method === 'GET') {
+        const share = await env.DB.prepare(
+          `SELECT token, enabled FROM gallery_shares WHERE event_id = ? LIMIT 1`,
+        ).bind(admin.eventId).first()
+        return json(request, {
+          ok: true,
+          enabled: Number(share?.enabled || 0) === 1,
+          shareUrl: share?.token ? `${url.origin}/gallery/share/${encodeURIComponent(share.token)}` : null,
+        })
+      }
+
+      if (url.pathname === '/api/admin/gallery-share' && request.method === 'POST') {
+        const event = await getEvent(env)
+        if (!event || !isCazEvent(event)) return json(request, { ok: false, error: 'Guest sharing is not available for this event.' }, 404)
+
+        const body = await readJson(request)
+        const enabled = body.enabled === true
+        const now = new Date().toISOString()
+        let share = await env.DB.prepare(
+          `SELECT token, enabled FROM gallery_shares WHERE event_id = ? LIMIT 1`,
+        ).bind(admin.eventId).first()
+
+        if (!share) {
+          const token = createShareToken()
+          await env.DB.prepare(
+            `INSERT INTO gallery_shares (event_id, token, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+          ).bind(admin.eventId, token, enabled ? 1 : 0, now, now).run()
+          share = { token, enabled: enabled ? 1 : 0 }
+        } else {
+          await env.DB.prepare(
+            `UPDATE gallery_shares SET enabled = ?, updated_at = ? WHERE event_id = ?`,
+          ).bind(enabled ? 1 : 0, now, admin.eventId).run()
+          share.enabled = enabled ? 1 : 0
+        }
+
+        return json(request, {
+          ok: true,
+          enabled,
+          shareUrl: `${url.origin}/gallery/share/${encodeURIComponent(share.token)}`,
+        })
       }
 
       if (url.pathname === '/api/admin/stats' && request.method === 'GET') {
@@ -829,9 +1062,14 @@ export default {
           return json(request, { ok: false, error: 'The selected photos could not be found' }, 404)
         }
 
+        // `event` was never defined in this block, so this handler threw a
+        // ReferenceError and every organiser ZIP download failed.
+        const event = await getEvent(env)
+        const zipSlug = String(event?.slug || env.EVENT_SLUG || 'event').replace(/[^a-z0-9-]/gi, '') || 'event'
+
         const headers = new Headers(corsHeaders(request))
         headers.set('Content-Type', 'application/zip')
-        headers.set('Content-Disposition', 'attachment; filename="sophies-last-rodeo-photos.zip"')
+        headers.set('Content-Disposition', `attachment; filename="${zipSlug}-photos.zip"`)
         headers.set('Cache-Control', 'no-store')
         headers.set('X-Content-Type-Options', 'nosniff')
 
@@ -871,3 +1109,4 @@ export default {
     return env.ASSETS.fetch(request)
   },
 }
+
