@@ -36,7 +36,7 @@
     // Admin builder at admin.onlinedisposablecamera.co.uk. It stays locked
     // until both Access values are filled in (see the Cloudflare Access app).
     "OWNER_EMAILS": "hello@onlinedisposablecamera.co.uk,onlinedisposablecamera@gmail.com",
-    "ACCESS_TEAM_DOMAIN": "onlinedisposablecamera.cloudflareaccess.com",
+    "ACCESS_TEAM_DOMAIN": "green-wave-f82c.cloudflareaccess.com",
     "ACCESS_AUD": "3956be261b991e669b41037de61f887bb7cd6298e76b370f498e7a072f9258a7"
   },
   // Nightly storage job, 03:00 UTC (3am in winter, 4am in summer).
