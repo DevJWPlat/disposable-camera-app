@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { eventConfig, eventMissing } from '@/config/event.js'
+import { eventConfig, eventMissing, isBuilder } from '@/config/event.js'
 
 // Each theme's views load only when needed, so one event's images and code
 // aren't downloaded on another event's site.
@@ -63,7 +63,16 @@ const themeViews = {
 
 const views = themeViews[eventConfig.key] || defaultViews
 
-const routes = eventMissing
+const builderRoutes = [
+  { path: '/', name: 'builder-home', component: () => import('@/builder/BuilderHome.vue') },
+  { path: '/events/new', name: 'builder-new', component: () => import('@/builder/BuilderEdit.vue') },
+  { path: '/events/:slug', name: 'builder-edit', component: () => import('@/builder/BuilderEdit.vue') },
+  { path: '/:pathMatch(.*)*', redirect: '/' },
+]
+
+const routes = isBuilder
+  ? builderRoutes
+  : eventMissing
   ? [{ path: '/:pathMatch(.*)*', name: 'no-event', component: NoEventView }]
   : [
       { path: '/', name: 'landing', component: views.landing },

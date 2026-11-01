@@ -18,6 +18,9 @@ const runtime = hasWindow && '__ODC_EVENT__' in window ? window.__ODC_EVENT__ : 
 
 export const eventMissing = runtime === null
 
+// The admin builder at admin.<domain> (the Worker sets this flag).
+export const isBuilder = hasWindow && window.__ODC_BUILDER__ === true
+
 const fallbackKey = import.meta.env.VITE_EVENT || 'sophies-last-rodeo'
 
 const noEvent = {

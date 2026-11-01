@@ -1,4 +1,5 @@
 import { runStorageJob } from './storage.js'
+import { handleBuilder, verifyOwner, isReservedSlug } from './builder.js'
 // The single app that serves every event. The event is chosen from the
 // request's hostname (see resolveEvent). The old per-event deployments run
 // worker/legacy.js until cutover.
@@ -170,6 +171,7 @@ function slugFromAppHost(hostname, appDomain) {
   if (!appDomain || !hostname.endsWith(suffix)) return null
   const label = hostname.slice(0, -suffix.length)
   // One level only: caz-and-dan.onlinedisposablecamera.co.uk, not a.b.onlinedisposablecamera.co.uk
+  if (isReservedSlug(label)) return null
   return /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label) ? label : null
 }
 
@@ -504,6 +506,21 @@ export default {
     const host = normaliseHost(url.hostname)
     if (appDomain && (host === appDomain || host === `www.${appDomain}`)) {
       return fetch(request)
+    }
+
+    // Admin builder: admin.<APP_DOMAIN>, behind Cloudflare Access.
+    if (appDomain && host === `admin.${appDomain}`) {
+      if (url.pathname.startsWith('/api/builder/')) return handleBuilder(request, env, url)
+      if (url.pathname.startsWith('/api/')) return json(request, { ok: false, error: 'Not found' }, 404)
+      if (!(await verifyOwner(request, env))) {
+        return new Response('<!doctype html><meta charset="utf-8"><title>Sign in</title><p style="font:16px system-ui;padding:24px">Please sign in through Cloudflare Access to use the builder.</p>', {
+          status: 403,
+          headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
+        })
+      }
+      const page = await env.ASSETS.fetch(new Request(new URL('/', url), request))
+      const html = (await page.text()).replace('</head>', '<script>window.__ODC_BUILDER__=true;window.__ODC_EVENT__=null</script><title>Event builder</title></head>')
+      return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' } })
     }
 
     let eventPromise = null

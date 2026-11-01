@@ -32,7 +32,12 @@
     "ADMIN_COOKIE_NAME": "odc_admin",
     // Storage job: "on" deletes expired events; anything else only reports.
     "STORAGE_DELETION": "off",
-    "NOTIFY_EMAIL": "onlinedisposablecamera@gmail.com"
+    "NOTIFY_EMAIL": "onlinedisposablecamera@gmail.com",
+    // Admin builder at admin.onlinedisposablecamera.co.uk. It stays locked
+    // until both Access values are filled in (see the Cloudflare Access app).
+    "OWNER_EMAILS": "hello@onlinedisposablecamera.co.uk,onlinedisposablecamera@gmail.com",
+    "ACCESS_TEAM_DOMAIN": "",
+    "ACCESS_AUD": ""
   },
   // Nightly storage job, 03:00 UTC (3am in winter, 4am in summer).
   "triggers": {
