@@ -281,6 +281,29 @@ export async function handleBuilder(request, env, url) {
     return json({ ok: true, name })
   }
 
+  // Organisers for this event and where each one is up to.
+  if (action === '/organisers' && method === 'GET') {
+    const { results = [] } = await env.DB.prepare(
+      `SELECT u.email, u.status, u.activated_at, u.last_login_at,
+              (SELECT MAX(i.expires_at) FROM admin_invites i WHERE i.event_id = u.event_id AND LOWER(i.email) = LOWER(u.email) AND i.used_at IS NULL) AS invite_expires_at
+       FROM admin_users u
+       WHERE u.event_id = ?
+       ORDER BY u.created_at`,
+    ).bind(event.id).all()
+    const now = new Date().toISOString()
+    return json({
+      ok: true,
+      organisers: results.map((u) => ({
+        email: u.email,
+        state: u.status === 'active' ? 'active' : u.invite_expires_at && u.invite_expires_at > now ? 'invited' : 'expired',
+        activatedAt: u.activated_at || null,
+        lastLoginAt: u.last_login_at || null,
+        inviteExpiresAt: u.invite_expires_at || null,
+      })),
+      joinUsername: parseSettings(event.settings_json).joinUsername || null,
+    })
+  }
+
   // Organiser invite: returns the setup link to send.
   if (action === '/invite' && method === 'POST') {
     const body = await readBody(request)

@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { apiRequest } from '@/composables/api.js'
 import { THEME_CHOICES, THEME_FIELDS, getPath, setPath, placeholderFor, isBespoke } from './themeFields.js'
+import BdDateField from './BdDateField.vue'
 import './builder.css'
 
 const route = useRoute()
@@ -12,9 +13,8 @@ const creating = computed(() => !route.params.slug)
 const me = ref('')
 const appDomain = ref('onlinedisposablecamera.co.uk')
 const loading = ref(true)
-const saving = ref(false)
+const creatingBusy = ref(false)
 const error = ref('')
-const notice = ref('')
 const event = ref(null)
 const previewKey = ref(0)
 const slugTouched = ref(false)
@@ -32,9 +32,10 @@ const form = reactive({
 })
 
 const invite = reactive({ email: '', link: '', busy: false, error: '', copied: false })
+const organisers = ref([])
 const uploads = reactive({})
 
-// ---------- date helpers (inputs use this browser's local time, i.e. UK) ----------
+// ---------- dates (this browser's local time, i.e. UK) ----------
 const pad = (n) => String(n).padStart(2, '0')
 function isoToLocalInput(iso) {
   if (!iso) return ''
@@ -44,7 +45,6 @@ function isoToLocalInput(iso) {
 const localInputToIso = (value) => (value ? new Date(value).toISOString() : null)
 const isoToDate = (iso) => (iso ? isoToLocalInput(iso).slice(0, 10) : '')
 const dateToStorageIso = (date) => (date ? new Date(`${date}T23:59:59`).toISOString() : null)
-
 function addDays(date, days) {
   const d = new Date(`${date}T12:00:00`)
   d.setDate(d.getDate() + days)
@@ -56,13 +56,34 @@ function addMonths(date, months) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
-// New events: sensible defaults follow the event date until edited.
+// New events: reveal and storage follow the event date until changed by hand.
 const unlockTouched = ref(false)
 const storageTouched = ref(false)
 watch(() => form.eventDate, (date) => {
   if (!creating.value || !date) return
   if (!unlockTouched.value) form.galleryUnlockLocal = `${addDays(date, 1)}T09:00`
   if (!storageTouched.value) form.storageDate = addMonths(date, 3)
+})
+function setUnlock(value) {
+  unlockTouched.value = true
+  form.galleryUnlockLocal = value
+}
+function setStorage(value) {
+  storageTouched.value = true
+  form.storageDate = value
+}
+
+const standardStorage = computed(() => (form.eventDate ? addMonths(form.eventDate, 3) : ''))
+const storageWarning = computed(() => {
+  if (!form.eventDate || !form.storageDate) return ''
+  if (form.storageDate < form.eventDate) return 'This is before the event. Photos would be deleted before anyone sees them.'
+  if (form.storageDate > standardStorage.value) return 'Longer than the standard three months. Extra storage is a paid add-on, so check it’s been agreed and paid for.'
+  return ''
+})
+const unlockWarning = computed(() => {
+  if (!form.eventDate || !form.galleryUnlockLocal) return ''
+  if (form.galleryUnlockLocal.slice(0, 10) < form.eventDate) return 'This is before the event, so the organiser could see photos as they’re taken.'
+  return ''
 })
 
 function slugify(text) {
@@ -73,17 +94,12 @@ watch(() => form.title, (title) => {
 })
 
 const fields = computed(() => THEME_FIELDS[form.theme] || [])
-// Bespoke designs (Caz & Dan, Sophie) keep their own theme and design.
 const bespoke = computed(() => Boolean(event.value) && isBespoke(event.value.theme))
 const host = computed(() => event.value?.host || (form.slug ? `${form.slug}.${appDomain.value}` : ''))
 const previewUrl = computed(() => (event.value ? `https://${host.value}/?preview=${previewKey.value}` : ''))
 
-function fieldValue(path) {
-  return getPath(form.settings, path) ?? ''
-}
-function setField(path, value) {
-  setPath(form.settings, path, value)
-}
+const fieldValue = (path) => getPath(form.settings, path) ?? ''
+const setField = (path, value) => setPath(form.settings, path, value)
 function photoUrl(path) {
   const name = getPath(form.settings, path)
   return name && event.value ? `https://${host.value}/api/event/image/${encodeURIComponent(name)}` : ''
@@ -115,30 +131,77 @@ function payload() {
   }
 }
 
-async function save() {
-  saving.value = true
+// ---------- create (new events) ----------
+async function createEvent() {
+  creatingBusy.value = true
   error.value = ''
-  notice.value = ''
   try {
-    if (creating.value) {
-      const data = await apiRequest('/api/builder/events', { method: 'POST', body: JSON.stringify(payload()) })
-      loadEvent(data.event)
-      notice.value = 'Event created. Add the design photos below.'
-      router.replace(`/events/${data.event.slug}`)
-    } else {
-      const data = await apiRequest(`/api/builder/events/${event.value.slug}`, { method: 'PUT', body: JSON.stringify(payload()) })
-      loadEvent(data.event)
-      notice.value = 'Saved.'
-    }
-    previewKey.value++
+    const data = await apiRequest('/api/builder/events', { method: 'POST', body: JSON.stringify(payload()) })
+    loadEvent(data.event)
+    lastSaved = JSON.stringify(payload())
+    saveState.value = 'saved'
+    router.replace(`/events/${data.event.slug}`)
   } catch (err) {
     error.value = err.message
   } finally {
-    saving.value = false
+    creatingBusy.value = false
   }
 }
 
-// Photos are resized in the browser (longest side 2000px) before upload.
+// ---------- autosave (existing events) ----------
+// Saves about a second after the last change. The form is not reloaded from
+// the server afterwards, so typing is never interrupted.
+const saveState = ref('idle') // idle | pending | saving | saved | error
+let lastSaved = ''
+let timer = null
+let inFlight = null
+
+async function saveNow() {
+  if (creating.value || !event.value) return
+  clearTimeout(timer)
+  const body = JSON.stringify(payload())
+  if (body === lastSaved) {
+    if (saveState.value === 'pending') saveState.value = 'saved'
+    return
+  }
+  if (inFlight) await inFlight
+  saveState.value = 'saving'
+  error.value = ''
+  inFlight = apiRequest(`/api/builder/events/${event.value.slug}`, { method: 'PUT', body })
+    .then((data) => {
+      event.value = data.event
+      lastSaved = body
+      saveState.value = 'saved'
+      previewKey.value++
+    })
+    .catch((err) => {
+      saveState.value = 'error'
+      error.value = err.message
+    })
+    .finally(() => {
+      inFlight = null
+    })
+  await inFlight
+}
+
+watch(
+  () => JSON.stringify(payload()),
+  (body) => {
+    if (creating.value || !event.value || body === lastSaved) return
+    saveState.value = 'pending'
+    clearTimeout(timer)
+    timer = setTimeout(saveNow, 900)
+  },
+)
+
+const statusText = computed(() => ({
+  pending: 'Unsaved changes…',
+  saving: 'Saving…',
+  saved: 'All changes saved',
+  error: error.value || 'Couldn’t save',
+}[saveState.value] || ''))
+
+// ---------- photos (resized in the browser, longest side 2000px) ----------
 function resizeImage(file, maxSide = 2000, quality = 0.86) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file)
@@ -166,8 +229,7 @@ async function uploadPhoto(path, fileEvent) {
   uploads[path] = 'Uploading…'
   try {
     const blob = await resizeImage(file)
-    const base = path.replace(/[^a-z0-9]+/gi, '-').toLowerCase()
-    const name = `${base}-${Date.now().toString(36)}.jpg`
+    const name = `${path.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-${Date.now().toString(36)}.jpg`
     const response = await fetch(`/api/builder/events/${event.value.slug}/photo?name=${encodeURIComponent(name)}`, {
       method: 'POST',
       credentials: 'include',
@@ -178,12 +240,28 @@ async function uploadPhoto(path, fileEvent) {
     if (!response.ok || !data?.ok) throw new Error(data?.error || 'Upload failed.')
     setField(path, data.name)
     uploads[path] = ''
-    await save()
+    await saveNow()
   } catch (err) {
     uploads[path] = err.message
   } finally {
     fileEvent.target.value = ''
   }
+}
+
+// ---------- organisers ----------
+async function loadOrganisers() {
+  if (!event.value) return
+  try {
+    organisers.value = (await apiRequest(`/api/builder/events/${event.value.slug}/organisers`)).organisers
+  } catch {
+    organisers.value = []
+  }
+}
+
+function organiserState(o) {
+  if (o.state === 'active') return 'Set up and ready to log in'
+  if (o.state === 'invited') return 'Invite sent, not set up yet'
+  return 'Invite expired: create a new link'
 }
 
 async function createInvite() {
@@ -194,6 +272,7 @@ async function createInvite() {
   try {
     const data = await apiRequest(`/api/builder/events/${event.value.slug}/invite`, { method: 'POST', body: JSON.stringify({ email: invite.email }) })
     invite.link = data.link
+    await loadOrganisers()
   } catch (err) {
     invite.error = err.message
   } finally {
@@ -213,7 +292,7 @@ async function copyInvite() {
 const inviteMail = computed(() => {
   if (!invite.link) return ''
   const subject = `Your organiser access for ${form.title}`
-  const body = `Hi,\n\nHere's your private link to set up the organiser dashboard for ${form.title}:\n\n${invite.link}\n\nIt lasts 7 days. Once you've chosen a password, you can log in any time at https://${host.value}/admin\n\nJonny\nOnline Disposable Camera`
+  const body = `Hi,\n\nHere's your private link to set up the organiser dashboard for ${form.title}:\n\n${invite.link}\n\nIt lasts 7 days. Open it, confirm your email and choose a password. After that, you can log in any time at https://${host.value}/admin to see how many guests have joined, open the gallery once it unlocks, download photos and share the gallery with guests.\n\nJonny\nOnline Disposable Camera`
   return `mailto:${encodeURIComponent(invite.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
 })
 
@@ -222,7 +301,12 @@ onMounted(async () => {
     const who = await apiRequest('/api/builder/me')
     me.value = who.email
     appDomain.value = who.appDomain || appDomain.value
-    if (!creating.value) loadEvent((await apiRequest(`/api/builder/events/${route.params.slug}`)).event)
+    if (!creating.value) {
+      loadEvent((await apiRequest(`/api/builder/events/${route.params.slug}`)).event)
+      lastSaved = JSON.stringify(payload())
+      saveState.value = 'saved'
+      loadOrganisers()
+    }
   } catch (err) {
     error.value = err.message
   } finally {
@@ -247,7 +331,7 @@ onMounted(async () => {
       <p v-if="loading" class="bd-msg">Loading…</p>
 
       <div v-else class="bd-edit">
-        <form @submit.prevent="save">
+        <form @submit.prevent="creating ? createEvent() : saveNow()">
           <section v-if="bespoke" class="bd-card bd-section">
             <h2>Bespoke design</h2>
             <p>This event has its own custom screens, so its theme and design are fixed. Everything else here can be changed.</p>
@@ -290,26 +374,29 @@ onMounted(async () => {
                 <small v-else>Addresses can’t change once created.</small>
               </label>
               <div class="bd-grid bd-grid--2">
-                <label class="bd-field">
+                <div class="bd-field">
                   <span>Event date</span>
-                  <input v-model="form.eventDate" class="bd-input" type="date" required />
-                </label>
+                  <BdDateField v-model="form.eventDate" />
+                </div>
                 <label class="bd-field">
                   <span>Photos per guest</span>
                   <input v-model.number="form.maxShots" class="bd-input" type="number" min="1" max="200" required />
                 </label>
-                <label class="bd-field">
+                <div class="bd-field">
                   <span>Gallery opens (UK time)</span>
-                  <input v-model="form.galleryUnlockLocal" class="bd-input" type="datetime-local" @input="unlockTouched = true" />
-                </label>
-                <label class="bd-field">
+                  <BdDateField :model-value="form.galleryUnlockLocal" with-time placeholder="Choose a date and time" @update:model-value="setUnlock" />
+                  <small>When the organiser can see the photos.</small>
+                  <p v-if="unlockWarning" class="bd-warn">{{ unlockWarning }}</p>
+                </div>
+                <div class="bd-field">
                   <span>Photos kept until</span>
-                  <input v-model="form.storageDate" class="bd-input" type="date" @input="storageTouched = true" />
-                  <small>Three months after the event as standard.</small>
-                </label>
+                  <BdDateField :model-value="form.storageDate" @update:model-value="setStorage" />
+                  <small>Three months after the event is standard.</small>
+                  <p v-if="storageWarning" class="bd-warn">{{ storageWarning }}</p>
+                </div>
               </div>
               <label class="bd-toggle">
-                <span class="bd-field"><span>Guest gallery</span><small>Lets the organiser share a gallery link with guests.</small></span>
+                <span class="bd-field"><span>Guest gallery</span><small>Lets the organiser share a gallery link with guests once it opens.</small></span>
                 <input v-model="form.guestSharing" type="checkbox" />
               </label>
             </div>
@@ -355,10 +442,24 @@ onMounted(async () => {
 
           <section v-if="event" class="bd-card bd-section">
             <h2>Organiser</h2>
-            <p>Creates a private setup link (lasts 7 days). Send it however you like.</p>
+            <p>The organiser is whoever booked the camera, such as the couple or the person planning the party. They get a private dashboard at <strong>{{ host }}/admin</strong> where they can see how many guests have joined, open the gallery once it unlocks, download photos and share the gallery with guests.</p>
+            <ol class="bd-steps">
+              <li>Enter the organiser’s email and create a setup link.</li>
+              <li>Send them the link. “Open an email with the link” writes the message for you.</li>
+              <li>They open it, confirm their email and choose a password. The link works once and lasts 7 days.</li>
+              <li>From then on they log in at {{ host }}/admin with that email and password.</li>
+            </ol>
+
+            <ul v-if="organisers.length" class="bd-orgs">
+              <li v-for="o in organisers" :key="o.email">
+                <span>{{ o.email }}</span>
+                <small>{{ organiserState(o) }}</small>
+              </li>
+            </ul>
+
             <div class="bd-row" style="flex-wrap: nowrap">
               <input v-model.trim="invite.email" class="bd-input" type="email" placeholder="organiser@example.com" />
-              <button type="button" class="bd-btn" :disabled="invite.busy || !invite.email" @click="createInvite">{{ invite.busy ? 'Creating…' : 'Create link' }}</button>
+              <button type="button" class="bd-btn" :disabled="invite.busy || !invite.email" @click="createInvite">{{ invite.busy ? 'Creating…' : 'Create setup link' }}</button>
             </div>
             <p v-if="invite.error" class="bd-msg bd-msg--error">{{ invite.error }}</p>
             <template v-if="invite.link">
@@ -371,11 +472,14 @@ onMounted(async () => {
           </section>
 
           <div class="bd-savebar">
-            <span>
-              <span v-if="error" class="bd-msg bd-msg--error">{{ error }}</span>
-              <span v-else-if="notice" class="bd-msg bd-msg--ok">{{ notice }}</span>
-            </span>
-            <button class="bd-btn" :disabled="saving">{{ saving ? 'Saving…' : creating ? 'Create event' : 'Save changes' }}</button>
+            <template v-if="creating">
+              <span><span v-if="error" class="bd-msg bd-msg--error">{{ error }}</span></span>
+              <button class="bd-btn" :disabled="creatingBusy">{{ creatingBusy ? 'Creating…' : 'Create event' }}</button>
+            </template>
+            <template v-else>
+              <span class="bd-status" :class="`bd-status--${saveState}`">{{ statusText }}</span>
+              <small class="bd-status">Changes save automatically</small>
+            </template>
           </div>
         </form>
 
